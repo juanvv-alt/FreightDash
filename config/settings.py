@@ -173,10 +173,25 @@ JAZZMIN_SETTINGS = {
     "site_brand": "FreightDash",
     "welcome_sign": "Welcome to FreightDash Admin",
     "copyright": "FreightDash © 2026",
+    
+    # Layout
     "show_sidebar": True,
     "navigation_expanded": False,
     "show_ui_builder": False,
     "language_chooser": False,
+    "search_model": "auth.User",
+}
+
+# Jazzmin UI Tweaks
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small": False,
+    "footer_small": False,
+    "body_small": False,
+    "brand_small": False,
+    "brand_colour": "navbar-primary",
+    "accent": "accent-primary",
+    "navbar": "navbar-primary navbar-dark",
+    "sidebar": "sidebar-dark-primary",
 }
 
 # Default primary key field type

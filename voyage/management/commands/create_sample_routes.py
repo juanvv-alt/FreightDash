@@ -27,6 +27,16 @@ class Command(BaseCommand):
             },
         ]
 
+        # Get list of route names that should exist
+        route_names_to_keep = [r['route'] for r in routes]
+        
+        # Delete any routes NOT in the list above
+        deleted_count, _ = RouteParameters.objects.exclude(route__in=route_names_to_keep).delete()
+        if deleted_count > 0:
+            self.stdout.write(
+                self.style.WARNING(f'Deleted {deleted_count} old route(s)')
+            )
+
         for route_data in routes:
             route_name = route_data['route']
             obj, created = RouteParameters.objects.get_or_create(
