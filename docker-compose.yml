@@ -1,0 +1,97 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: freightdash_db
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-freightdash}
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      # Singapore timezone
+      TZ: Asia/Singapore
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+
+  # Django Application Service
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: freightdash_web
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py create_admin &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+    environment:
+      # Database Configuration
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_NAME: ${DATABASE_NAME:-freightdash}
+      DATABASE_USER: ${DATABASE_USER:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      # Django Settings
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      # Render Region Optimization (Singapore)
+      TZ: Asia/Singapore
+      # CORS Settings (adjust as needed)
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:3000,http://localhost:8000}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+    # For development with auto-reload
+    stdin_open: true
+    tty: true
+
+  # Redis Cache Service (Optional but recommended for production)
+  redis:
+    image: redis:7-alpine
+    container_name: freightdash_redis
+    environment:
+      TZ: Asia/Singapore
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  static_volume:
+    driver: local
+
+networks:
+  freightdash_network:
+    driver: bridge
