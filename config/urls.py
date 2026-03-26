@@ -15,11 +15,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from . import views
 
 urlpatterns = [
-    path('', views.index, name='index'),
+    path('', include('voyage.urls')),  # TCE Calculator as homepage
     path('admin/', admin.site.urls),
     path('health/', views.health_check, name='health_check'),
     path('ready/', views.readiness_check, name='readiness_check'),

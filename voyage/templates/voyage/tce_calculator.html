@@ -1,0 +1,418 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}TCE Calculator - FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tce-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 30px 20px;
+    }
+    
+    .calculator-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 30px;
+        margin-bottom: 30px;
+    }
+    
+    .calculator-title {
+        font-size: 28px;
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 10px;
+    }
+    
+    .calculator-subtitle {
+        font-size: 14px;
+        color: #777;
+        margin-bottom: 30px;
+    }
+    
+    .form-section {
+        margin-bottom: 25px;
+    }
+    
+    .form-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        padding: 10px 0;
+        border-bottom: 2px solid #007bff;
+        margin-bottom: 15px;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 15px;
+    }
+    
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .form-group label {
+        font-weight: 500;
+        margin-bottom: 8px;
+        color: #333;
+        font-size: 14px;
+    }
+    
+    .form-group input,
+    .form-group select {
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        transition: border-color 0.2s;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+    
+    .form-group small {
+        font-size: 12px;
+        color: #999;
+        margin-top: 4px;
+    }
+    
+    .toggle-btn {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #495057;
+        transition: all 0.2s;
+    }
+    
+    .toggle-btn:hover {
+        background: #e9ecef;
+    }
+    
+    .parameters-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        display: none;
+    }
+    
+    .parameters-section.show {
+        display: block;
+    }
+    
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 30px;
+    }
+    
+    .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .btn-primary {
+        background: #007bff;
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background: #0056b3;
+    }
+    
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+    
+    .btn-secondary:hover {
+        background: #545b62;
+    }
+    
+    .results-section {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        border-radius: 4px;
+        padding: 20px;
+        margin-top: 30px;
+        display: none;
+    }
+    
+    .results-section.show {
+        display: block;
+    }
+    
+    .result-item {
+        font-size: 18px;
+        font-weight: 600;
+        color: #155724;
+        margin: 10px 0;
+    }
+    
+    .result-label {
+        color: #1e7e34;
+        font-weight: 500;
+    }
+    
+    .pricing-fieldset {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 20px;
+        margin: 20px 0;
+        background: #ffffff;
+    }
+    
+    .pricing-fieldset legend {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        padding: 0 10px;
+        margin-left: -10px;
+    }
+    
+    .route-selection {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+    
+    @media (max-width: 768px) {
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+        
+        .button-group {
+            flex-direction: column;
+        }
+        
+        .tce-container {
+            padding: 20px 10px;
+        }
+        
+        .calculator-card {
+            padding: 20px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tce-container">
+    <div class="calculator-card">
+        <h1 class="calculator-title">TCE Calculator</h1>
+        <p class="calculator-subtitle">
+            Select a route, adjust parameters, then choose whether to calculate TCE (given a Freight Rate) 
+            or calculate the Freight (given a target TCE).
+        </p>
+        
+        <form method="POST" id="tceForm">
+            {% csrf_token %}
+            
+            <!-- Route Selection -->
+            <div class="route-selection">
+                <div class="form-group">
+                    <label for="{{ form.route.id_for_label }}">Select Route:</label>
+                    {{ form.route }}
+                    <small>Selecting a route loads its default parameters from the database.</small>
+                </div>
+            </div>
+            
+            <!-- Toggle Parameters Button -->
+            <button type="button" class="toggle-btn" onclick="toggleParameters()">
+                <strong>▼ Show/Hide Parameters</strong>
+            </button>
+            
+            <!-- Parameter Fields -->
+            <div id="parameterFields" class="parameters-section">
+                <!-- Distance Parameters -->
+                <div class="form-section">
+                    <div class="form-section-title">Distance Parameters</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.ballast_distance.id_for_label }}">Ballast Distance (nm):</label>
+                            {{ form.ballast_distance }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.laden_distance.id_for_label }}">Laden Distance (nm):</label>
+                            {{ form.laden_distance }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Cargo Parameters -->
+                <div class="form-section">
+                    <div class="form-section-title">Cargo Parameters</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.intake.id_for_label }}">Intake (mt):</label>
+                            {{ form.intake }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.load_rate.id_for_label }}">Load Rate (mt/day):</label>
+                            {{ form.load_rate }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.discharge_rate.id_for_label }}">Discharge Rate (mt/day):</label>
+                            {{ form.discharge_rate }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.turntime_hours.id_for_label }}">Turn Time (hours):</label>
+                            {{ form.turntime_hours }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Port Expenses -->
+                <div class="form-section">
+                    <div class="form-section-title">Port Expenses</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.port_exp_load_port.id_for_label }}">Port Expenses at Load Port:</label>
+                            {{ form.port_exp_load_port }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.port_exp_discharge_port.id_for_label }}">Port Expenses at Discharge Port:</label>
+                            {{ form.port_exp_discharge_port }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Commission & Margins -->
+                <div class="form-section">
+                    <div class="form-section-title">Commission & Margins</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.freight_commission_pct.id_for_label }}">Freight Commission (%):</label>
+                            {{ form.freight_commission_pct }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.sea_margin_pct.id_for_label }}">Sea Margin (%):</label>
+                            {{ form.sea_margin_pct }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Speed Parameters -->
+                <div class="form-section">
+                    <div class="form-section-title">Speed Parameters</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.ballast_speed.id_for_label }}">Ballast Speed (nm/hour):</label>
+                            {{ form.ballast_speed }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.laden_speed.id_for_label }}">Laden Speed (nm/hour):</label>
+                            {{ form.laden_speed }}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Consumption Parameters -->
+                <div class="form-section">
+                    <div class="form-section-title">Consumption Parameters</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.ballast_consumption.id_for_label }}">Ballast Consumption (mt/24hr):</label>
+                            {{ form.ballast_consumption }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.laden_consumption.id_for_label }}">Laden Consumption (mt/24hr):</label>
+                            {{ form.laden_consumption }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.port_consumption.id_for_label }}">Port Consumption (mt/24hr):</label>
+                            {{ form.port_consumption }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Key Pricing Inputs -->
+            <div class="pricing-fieldset">
+                <legend>Key Pricing Inputs</legend>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="{{ form.freight_rate.id_for_label }}">Freight Rate (currency/mt):</label>
+                        {{ form.freight_rate }}
+                        <small>Used when calculating TCE.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.fuel_price.id_for_label }}">Fuel Price (currency/mt of fuel):</label>
+                        {{ form.fuel_price }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.tce_field.id_for_label }}">TCE (currency/day):</label>
+                        {{ form.tce_field }}
+                        <small>Used when calculating Freight Rate.</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Buttons -->
+            <div class="button-group">
+                <button type="submit" name="calc_tce" class="btn btn-primary">Calculate TCE</button>
+                <button type="submit" name="calc_freight" class="btn btn-primary">Calculate Freight</button>
+            </div>
+        </form>
+        
+        <!-- Results -->
+        {% if calculated_tce or calculated_freight %}
+        <div class="results-section show">
+            {% if calculated_tce %}
+            <div class="result-item">
+                <span class="result-label">Calculated TCE:</span> {{ calculated_tce|floatformat:2 }}
+            </div>
+            {% endif %}
+            {% if calculated_freight %}
+            <div class="result-item">
+                <span class="result-label">Calculated Freight Rate:</span> {{ calculated_freight|floatformat:2 }}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function toggleParameters() {
+        const paramDiv = document.getElementById('parameterFields');
+        paramDiv.classList.toggle('show');
+        
+        // Update button text
+        const btn = document.querySelector('.toggle-btn');
+        if (paramDiv.classList.contains('show')) {
+            btn.innerHTML = '<strong>▲ Show/Hide Parameters</strong>';
+        } else {
+            btn.innerHTML = '<strong>▼ Show/Hide Parameters</strong>';
+        }
+    }
+    
+    // Handle route selection
+    document.getElementById('id_route').addEventListener('change', function() {
+        if (this.value) {
+            document.getElementById('tceForm').submit();
+        }
+    });
+</script>
+{% endblock %}
