@@ -15,8 +15,6 @@ services:
         value: "Asia/Singapore"
       - key: SECRET_KEY
         generateValue: true
-      - key: ALLOWED_HOSTS
-        value: "freightdash-web.onrender.com,freightdash.onrender.com"
       - key: DATABASE_URL
         fromDatabase:
           name: freightdash
