@@ -27,7 +27,13 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-&am)wz9ys0g-^f5j47_ke
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+# ALLOWED_HOSTS configuration for different environments
+_allowed_hosts = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+# Ensure we always have localhost for development
+ALLOWED_HOSTS = list(_allowed_hosts) + ['localhost', '127.0.0.1']
+# Remove duplicates while preserving order
+seen = set()
+ALLOWED_HOSTS = [x for x in ALLOWED_HOSTS if not (x in seen or seen.add(x))]
 
 
 # Application definition
