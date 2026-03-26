@@ -1,47 +1,28 @@
 services:
   - type: web
     name: freightdash-web
-    env: python
+    env: docker
     region: singapore
     plan: standard
-    
-    buildCommand: >
-      pip install -r requirements.txt &&
-      python manage.py collectstatic --noinput --clear
-    
-    startCommand: >
-      python manage.py migrate &&
-      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 4
+    dockerfilePath: ./Dockerfile
     
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.0"
       - key: DEBUG
         value: "False"
       - key: ENVIRONMENT
         value: "production"
       - key: TZ
         value: "Asia/Singapore"
+      - key: SECRET_KEY
+        generateValue: true
       - key: ALLOWED_HOSTS
-        fromDatabase:
-          name: freightdash
-          property: hosturl
+        value: "*.onrender.com"
       - key: DATABASE_URL
         fromDatabase:
           name: freightdash
           property: connectionString
-
-  - type: pserv
-    name: freightdash-db
-    env: postgres
-    plan: standard
-    region: singapore
-    ipAllowList: []
-    postgresMajorVersion: 15
-    
-    envVars:
-      - key: POSTGRES_DB
-        value: "freightdash"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://freightdash-web.onrender.com"
 
 databases:
   - name: freightdash
