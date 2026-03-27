@@ -30,10 +30,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: freightdash_web
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py create_admin &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+    command: sh /app/entrypoint.sh
     environment:
       # Database Configuration
       DATABASE_ENGINE: django.db.backends.postgresql

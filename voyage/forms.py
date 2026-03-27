@@ -22,12 +22,18 @@ class RouteParametersForm(forms.ModelForm):
 
 class TCECalculatorForm(forms.Form):
     """Form for TCE calculator inputs"""
-    route = forms.ModelChoiceField(
-        queryset=RouteParameters.objects.all(),
+    route = forms.ChoiceField(
+        choices=[],
         required=False,
-        empty_label="-- Choose a route --",
         widget=forms.Select(attrs={'class': 'form-control'})
     )
+
+    def __init__(self, *args, route_choices=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = [('', '-- Choose a route --')]
+        if route_choices:
+            choices.extend(route_choices)
+        self.fields['route'].choices = choices
     
     # Distance and cargo parameters
     ballast_distance = forms.FloatField(

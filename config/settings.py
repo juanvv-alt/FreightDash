@@ -95,30 +95,63 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-if config('DATABASE_URL', default=None):
-    # For Render deployment or when DATABASE_URL is explicitly set
+database_url = config('DATABASE_URL', default='').strip()
+environment = config('ENVIRONMENT', default='development')
+
+if database_url:
     import dj_database_url
+
     DATABASES = {
-        'default': dj_database_url.config(
-            default=config('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
+        'default': dj_database_url.parse(database_url, conn_max_age=600, conn_health_checks=True)
     }
+    # Avoid server-side cursors in production; they can be invalidated when
+    # transactions close before queryset iteration fully completes.
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 else:
-    # For local development with docker-compose
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': config('DATABASE_NAME', default='freightdash'),
-            'USER': config('DATABASE_USER', default='postgres'),
-            'PASSWORD': config('DATABASE_PASSWORD', default='changeme'),
-            'HOST': config('DATABASE_HOST', default='db'),
-            'PORT': config('DATABASE_PORT', default='5432', cast=int),
-            'CONN_MAX_AGE': 600,
-            'ATOMIC_REQUESTS': True,
+    database_host = config('DATABASE_HOST', default='db')
+
+    # Render can expose discrete Postgres variables depending on setup.
+    render_db_name = config('PGDATABASE', default='').strip()
+    render_db_user = config('PGUSER', default='').strip()
+    render_db_password = config('PGPASSWORD', default='').strip()
+    render_db_host = config('PGHOST', default='').strip()
+    render_db_port = config('PGPORT', default='').strip()
+
+    if all([render_db_name, render_db_user, render_db_password, render_db_host, render_db_port]):
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': render_db_name,
+                'USER': render_db_user,
+                'PASSWORD': render_db_password,
+                'HOST': render_db_host,
+                'PORT': int(render_db_port),
+                'CONN_MAX_AGE': 600,
+                'CONN_HEALTH_CHECKS': True,
+                'ATOMIC_REQUESTS': True,
+                'DISABLE_SERVER_SIDE_CURSORS': True,
+            }
         }
-    }
+    else:
+        if environment == 'production' and database_host == 'db':
+            raise RuntimeError(
+                'Production database is misconfigured: DATABASE_URL is missing and DATABASE_HOST is still set to the local docker host "db".'
+            )
+
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': config('DATABASE_NAME', default='freightdash'),
+                'USER': config('DATABASE_USER', default='postgres'),
+                'PASSWORD': config('DATABASE_PASSWORD', default='changeme'),
+                'HOST': database_host,
+                'PORT': config('DATABASE_PORT', default='5432', cast=int),
+                'CONN_MAX_AGE': 600,
+                'CONN_HEALTH_CHECKS': True,
+                'ATOMIC_REQUESTS': True,
+                'DISABLE_SERVER_SIDE_CURSORS': True,
+            }
+        }
 
 
 # Password validation
@@ -157,7 +190,9 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# CompressedStaticFilesStorage serves gzip-compressed files without requiring
+# a pre-built manifest JSON, avoiding startup failures on ephemeral containers.
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'

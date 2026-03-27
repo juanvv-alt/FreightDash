@@ -196,6 +196,16 @@
         border-radius: 4px;
         margin-bottom: 20px;
     }
+
+    .warning-banner {
+        background: #fff3cd;
+        border: 1px solid #ffe69c;
+        color: #664d03;
+        border-radius: 4px;
+        padding: 14px 16px;
+        margin-bottom: 20px;
+        font-size: 14px;
+    }
     
     @media (max-width: 768px) {
         .form-row {
@@ -225,6 +235,12 @@
             Select a route, adjust parameters, then choose whether to calculate TCE (given a Freight Rate) 
             or calculate the Freight (given a target TCE).
         </p>
+
+        {% if db_not_ready %}
+        <div class="warning-banner">
+            Database setup is incomplete. Run migrations in production: <strong>python manage.py migrate --noinput</strong>.
+        </div>
+        {% endif %}
         
         <form method="POST" id="tceForm">
             {% csrf_token %}

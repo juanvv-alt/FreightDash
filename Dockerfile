@@ -38,11 +38,14 @@ RUN useradd -m -u 1000 appuser
 # Copy application code
 COPY --chown=appuser:appuser . .
 
+# Ensure startup script can be executed by non-root user.
+RUN chmod +x /app/entrypoint.sh
+
 # Switch to non-root user
 USER appuser
 
-# Collect static files (required for production)
-RUN python manage.py collectstatic --noinput --clear || true
+# Ensure static root is writable by appuser then collect assets.
+RUN mkdir -p /app/staticfiles && python manage.py collectstatic --noinput --clear
 
-# Run Gunicorn - PORT variable is set by Render/Heroku, defaults to 8000
-CMD sh -c "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --worker-class sync --worker-tmp-dir /dev/shm --max-requests 1000 --max-requests-jitter 50 --timeout 600 --access-logfile - --error-logfile - --log-level info config.wsgi:application"
+# Run startup orchestration script.
+CMD ["/app/entrypoint.sh"]

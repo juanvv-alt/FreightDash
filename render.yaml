@@ -5,6 +5,7 @@ services:
     region: singapore
     plan: standard
     dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/
     
     envVars:
       - key: DEBUG
@@ -21,6 +22,8 @@ services:
           property: connectionString
       - key: CSRF_TRUSTED_ORIGINS
         value: "https://freightdash-web.onrender.com,https://freightdash.onrender.com"
+      - key: ALLOWED_HOSTS
+        value: "freightdash-web.onrender.com,freightdash.onrender.com"
 
 databases:
   - name: freightdash
