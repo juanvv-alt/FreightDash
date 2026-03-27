@@ -111,6 +111,26 @@ def tce_calculator(request):
                     )
                     form_initial['freight_rate'] = calculated_freight
         else:
+            if routes:
+                first_route = routes[0]
+                form_initial = {
+                    'route': str(first_route.id),
+                    'ballast_distance': first_route.ballast_distance,
+                    'laden_distance': first_route.laden_distance,
+                    'intake': first_route.intake,
+                    'load_rate': first_route.load_rate,
+                    'discharge_rate': first_route.discharge_rate,
+                    'turntime_hours': first_route.turntime_hours,
+                    'port_exp_load_port': first_route.port_exp_load_port,
+                    'port_exp_discharge_port': first_route.port_exp_discharge_port,
+                    'freight_commission_pct': first_route.freight_commission_pct,
+                    'sea_margin_pct': first_route.sea_margin_pct,
+                    'ballast_speed': first_route.ballast_speed,
+                    'laden_speed': first_route.laden_speed,
+                    'ballast_consumption': first_route.ballast_consumption,
+                    'laden_consumption': first_route.laden_consumption,
+                    'port_consumption': first_route.port_consumption,
+                }
             form = TCECalculatorForm(route_choices=route_choices)
 
         for key, value in form_initial.items():
