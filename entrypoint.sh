@@ -22,6 +22,9 @@ python manage.py migrate --noinput
 echo "[entrypoint] Seeding sample routes"
 python manage.py create_sample_routes || true
 
+echo "[entrypoint] Creating default admin user"
+python manage.py create_admin || true
+
 echo "[entrypoint] Collecting static files"
 python manage.py collectstatic --noinput --clear
 
