@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def tce_calculator(request):
     """
-    Main TCE Calculator view.
+    Main TCE Calculator viewer.
     Handles route selection and TCE/Freight calculations.
     """
     try:
