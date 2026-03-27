@@ -41,11 +41,13 @@ COPY --chown=appuser:appuser . .
 # Ensure startup script can be executed by non-root user.
 RUN chmod +x /app/entrypoint.sh
 
+# Ensure static root is pre-created and owned by appuser so collectstatic
+# can write to it at runtime. collectstatic runs via entrypoint.sh when
+# DATABASE_URL is available, not here during the build.
+RUN mkdir -p /app/staticfiles && chown -R appuser:appuser /app/staticfiles
+
 # Switch to non-root user
 USER appuser
-
-# Ensure static root is writable by appuser then collect assets.
-RUN mkdir -p /app/staticfiles && python manage.py collectstatic --noinput --clear
 
 # Run startup orchestration script.
 CMD ["/app/entrypoint.sh"]
