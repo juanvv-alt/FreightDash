@@ -4,8 +4,8 @@
 
 Your legacy PHP TCE calculator has been successfully converted to a Django application and integrated into FreightDash as the main dashboard. The calculator is now:
 
-✅ **Production-ready** - Built with Django best practices  
-✅ **Database-backed** - Routes stored in PostgreSQL  
+✅ **Production-ready** - Built witdh Django best practices  
+✅ **Database-backed** - Routes storeed in PostgreSQL  
 ✅ **Admin-integrated** - Full Jazzmin admin panel integration  
 ✅ **Responsive design** - Works on desktop, tablet, and mobile  
 ✅ **Sample data included** - 5 pre-configured shipping routes  
