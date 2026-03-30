@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width: 900px;">
+    <h1>Database Backup & Restore</h1>
+    <p>
+        Export and import app data for: <strong>{{ backup_app_labels }}</strong>
+    </p>
+
+    <div style="border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <h2 style="margin-top: 0;">Download Backup</h2>
+        <p>Generate a JSON backup of current data from the selected apps.</p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="download">
+            <button type="submit" class="default">Download JSON Backup</button>
+        </form>
+    </div>
+
+    <div style="border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin: 20px 0;">
+        <h2 style="margin-top: 0;">Restore Backup</h2>
+        <p>Upload a previously downloaded JSON backup file.</p>
+        <p><strong>Warning:</strong> If "replace existing" is checked, current core/voyage data will be deleted before import.</p>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="restore">
+            <div style="margin-bottom: 10px;">{{ restore_form.backup_file }}</div>
+            <div style="margin-bottom: 10px;">{{ restore_form.replace_existing }} {{ restore_form.replace_existing.label }}</div>
+            <button type="submit" class="default">Restore Backup</button>
+        </form>
+    </div>
+
+    <p>
+        Return to <a href="{% url 'admin:index' %}">Admin Home</a>
+    </p>
+</div>
+{% endblock %}
