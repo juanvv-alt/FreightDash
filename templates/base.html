@@ -406,6 +406,12 @@
                             <span class="menu-text">Handysize</span>
                         </a>
                     </div>
+                    <div class="list-group-item">
+                        <a href="{% url 'voyage:indices_custom' %}" class="{% if request.path == '/indices/custom/' %}active{% endif %}">
+                            <i class="far fa-circle"></i>
+                            <span class="menu-text">Custom</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>

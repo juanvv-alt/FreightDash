@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import RouteParameters
+from .models import CustomIndexPreset, RouteParameters
 
 
 @admin.register(RouteParameters)
@@ -29,4 +29,11 @@ class RouteParametersAdmin(admin.ModelAdmin):
             'fields': ('ballast_consumption', 'laden_consumption', 'port_consumption'),
         }),
     )
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(CustomIndexPreset)
+class CustomIndexPresetAdmin(admin.ModelAdmin):
+    list_display = ('name', 'updated_at', 'created_at')
+    search_fields = ('name',)
     readonly_fields = ('created_at', 'updated_at')

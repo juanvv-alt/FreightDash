@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load voyage_extras %}
 
-{% block title %}{{ vessel_label }} Indices - FreightDash{% endblock %}
+{% block title %}Custom Indices - FreightDash{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -21,7 +21,8 @@
     }
 
     .indices-controls,
-    .indices-table-card {
+    .indices-table-card,
+    .preset-card {
         background: #fff;
         border: 1px solid #e2e5e9;
         border-radius: 8px;
@@ -74,13 +75,6 @@
         font-size: 13px;
     }
 
-    .form-actions {
-        display: flex;
-        gap: 8px;
-        margin-top: 10px;
-        flex-wrap: wrap;
-    }
-
     .table-scroll {
         overflow-x: auto;
         border: 1px solid #e2e5e9;
@@ -97,27 +91,61 @@
         font-size: 13px;
         color: #6c757d;
     }
+
+    .preset-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="indices-header">
     <div>
-        <h1>{{ vessel_label }}</h1>
+        <h1>Custom</h1>
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0 mt-1">
                 <li class="breadcrumb-item"><a href="/">Home</a></li>
-                <li class="breadcrumb-item"><a href="{% url 'voyage:indices' %}">Freight Calculator</a></li>
-                <li class="breadcrumb-item active" aria-current="page">{{ vessel_label }}</li>
+                <li class="breadcrumb-item"><a href="{% url 'voyage:indices' %}">Indices</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Custom</li>
             </ol>
         </nav>
     </div>
 </div>
 
+<div class="preset-card">
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label fw-semibold">Load Saved Preset</label>
+            <select class="form-select" name="preset">
+                <option value="">-- Select preset --</option>
+                {% for preset in presets %}
+                <option value="{{ preset.id }}" {% if selected_preset_id == preset.id %}selected{% endif %}>{{ preset.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Date Range</label>
+            <div class="input-group">
+                <input type="date" class="form-control" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+                <span class="input-group-text">to</span>
+                <input type="date" class="form-control" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+            </div>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-outline-primary w-100">Load</button>
+        </div>
+    </form>
+</div>
+
 <form method="get" class="indices-controls">
+    {% if selected_preset_id %}
+    <input type="hidden" name="preset" value="{{ selected_preset_id }}">
+    {% endif %}
     <div class="row g-3">
         <div class="col-lg-8">
-            <label class="form-label fw-semibold">Indices</label>
+            <label class="form-label fw-semibold">Indices (mix from all vessel sizes)</label>
             <div class="indices-selector">
                 <div id="indicesTokenList" class="indices-token-list"></div>
                 <input
@@ -134,7 +162,7 @@
                 </datalist>
                 <div id="indicesHiddenInputs"></div>
             </div>
-            <div class="form-actions">
+            <div class="preset-actions mt-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="selectAllIndices">Select All Known</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" id="clearAllIndices">Clear All</button>
             </div>
@@ -151,6 +179,37 @@
         </div>
     </div>
 </form>
+
+<div class="preset-card">
+    <form method="post" id="savePresetForm" class="row g-3 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_preset">
+        <div id="savePresetHiddenInputs"></div>
+        <div class="col-md-8">
+            <label class="form-label fw-semibold">Save Current Selection as Preset</label>
+            <input
+                type="text"
+                class="form-control"
+                name="preset_name"
+                value="{{ selected_preset_name }}"
+                placeholder="Example: China iron ore watchlist"
+                required
+            >
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-success w-100">Save Preset</button>
+        </div>
+    </form>
+
+    {% if selected_preset_id %}
+    <form method="post" class="mt-2" onsubmit="return confirm('Delete this preset?');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_preset">
+        <input type="hidden" name="preset_id" value="{{ selected_preset_id }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm">Delete Selected Preset</button>
+    </form>
+    {% endif %}
+</div>
 
 <div class="indices-table-card">
     <div class="table-scroll">
@@ -206,17 +265,26 @@
         const tokenList = document.getElementById('indicesTokenList');
         const tokenInput = document.getElementById('indexTokenInput');
         const hiddenInputs = document.getElementById('indicesHiddenInputs');
+        const savePresetHiddenInputs = document.getElementById('savePresetHiddenInputs');
         const selectAllBtn = document.getElementById('selectAllIndices');
         const clearAllBtn = document.getElementById('clearAllIndices');
 
         function syncHiddenInputs() {
             hiddenInputs.innerHTML = '';
+            savePresetHiddenInputs.innerHTML = '';
+
             selectedIndices.forEach(function(indexName) {
                 const input = document.createElement('input');
                 input.type = 'hidden';
                 input.name = 'indices';
                 input.value = indexName;
                 hiddenInputs.appendChild(input);
+
+                const saveInput = document.createElement('input');
+                saveInput.type = 'hidden';
+                saveInput.name = 'indices';
+                saveInput.value = indexName;
+                savePresetHiddenInputs.appendChild(saveInput);
             });
         }
 

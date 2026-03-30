@@ -6,6 +6,7 @@ from django.db.utils import OperationalError
 from django.utils import timezone
 import logging
 from .models import RouteParameters
+from .models import CustomIndexPreset
 from .forms import TCECalculatorForm
 from .calculators import (
     calculate_fuel_and_days,
@@ -44,6 +45,18 @@ VESSEL_INDEX_GROUPS = {
 }
 
 
+def _all_known_indices():
+    seen = set()
+    ordered = []
+    for config in VESSEL_INDEX_GROUPS.values():
+        for index_name in config['indices']:
+            if index_name in seen:
+                continue
+            seen.add(index_name)
+            ordered.append(index_name)
+    return ordered
+
+
 def indices_redirect(request):
     return redirect('voyage:indices_by_vessel', vessel='capesize')
 
@@ -77,10 +90,20 @@ def indices_dashboard(request, vessel):
     if (end_date - start_date).days > 365:
         start_date = end_date - timedelta(days=365)
 
-    selected_indices = request.GET.getlist('indices')
-    selected_indices = [index for index in selected_indices if index in all_indices]
+    selected_indices_raw = request.GET.getlist('indices')
     if 'indices' not in request.GET:
         selected_indices = list(all_indices)
+    else:
+        selected_indices = []
+        seen_indices = set()
+        for index_name in selected_indices_raw:
+            cleaned = index_name.strip()
+            if not cleaned or len(cleaned) > 80:
+                continue
+            if cleaned in seen_indices:
+                continue
+            seen_indices.add(cleaned)
+            selected_indices.append(cleaned)
 
     total_days = (end_date - start_date).days + 1
     date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
@@ -108,6 +131,109 @@ def indices_dashboard(request, vessel):
         'has_data': False,
     }
     return render(request, 'voyage/indices_dashboard.html', context)
+
+
+def indices_custom(request):
+    all_indices = _all_known_indices()
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'save_preset':
+            preset_name = (request.POST.get('preset_name') or '').strip()
+            selected_raw = request.POST.getlist('indices')
+            selected_indices = []
+            seen = set()
+            for index_name in selected_raw:
+                cleaned = index_name.strip()
+                if not cleaned or len(cleaned) > 80 or cleaned in seen:
+                    continue
+                seen.add(cleaned)
+                selected_indices.append(cleaned)
+
+            if preset_name and selected_indices:
+                CustomIndexPreset.objects.update_or_create(
+                    name=preset_name,
+                    defaults={'indices': selected_indices},
+                )
+
+        if action == 'delete_preset':
+            preset_id = request.POST.get('preset_id')
+            try:
+                CustomIndexPreset.objects.filter(id=int(preset_id)).delete()
+            except (TypeError, ValueError):
+                pass
+
+        return redirect('voyage:indices_custom')
+
+    presets = list(CustomIndexPreset.objects.all())
+    selected_preset_id_raw = request.GET.get('preset')
+    selected_preset = None
+    if selected_preset_id_raw:
+        try:
+            selected_preset = CustomIndexPreset.objects.filter(id=int(selected_preset_id_raw)).first()
+        except ValueError:
+            selected_preset = None
+
+    today = timezone.localdate()
+    default_start = today - timedelta(days=30)
+    start_date_raw = request.GET.get('start_date', default_start.isoformat())
+    end_date_raw = request.GET.get('end_date', today.isoformat())
+
+    try:
+        start_date = timezone.datetime.strptime(start_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        start_date = default_start
+
+    try:
+        end_date = timezone.datetime.strptime(end_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        end_date = today
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    if (end_date - start_date).days > 365:
+        start_date = end_date - timedelta(days=365)
+
+    selected_indices_raw = request.GET.getlist('indices')
+    selected_indices = []
+    seen = set()
+    for index_name in selected_indices_raw:
+        cleaned = index_name.strip()
+        if not cleaned or len(cleaned) > 80 or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        selected_indices.append(cleaned)
+
+    if not selected_indices and selected_preset:
+        selected_indices = selected_preset.indices
+    if not selected_indices:
+        selected_indices = all_indices[:8]
+
+    total_days = (end_date - start_date).days + 1
+    date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
+    rows = []
+    for date_value in date_rows:
+        rows.append(
+            {
+                'date': date_value,
+                'values': {index_name: None for index_name in selected_indices},
+            }
+        )
+
+    context = {
+        'all_indices': all_indices,
+        'selected_indices': selected_indices,
+        'start_date': start_date,
+        'end_date': end_date,
+        'rows': rows,
+        'has_data': False,
+        'presets': presets,
+        'selected_preset_id': selected_preset.id if selected_preset else None,
+        'selected_preset_name': selected_preset.name if selected_preset else '',
+    }
+    return render(request, 'voyage/indices_custom.html', context)
 
 
 def tce_calculator(request):

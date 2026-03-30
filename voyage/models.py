@@ -44,3 +44,20 @@ class RouteParameters(models.Model):
 
     def __str__(self):
         return self.route
+
+
+class CustomIndexPreset(models.Model):
+    """User-defined index combinations across vessel classes."""
+
+    name = models.CharField(max_length=100, unique=True)
+    indices = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Custom Index Preset'
+        verbose_name_plural = 'Custom Index Presets'
+
+    def __str__(self):
+        return self.name
