@@ -84,6 +84,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.menu_items',
             ],
         },
     },
@@ -97,8 +98,17 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 database_url = config('DATABASE_URL', default='').strip()
 environment = config('ENVIRONMENT', default='development')
+database_engine = config('DATABASE_ENGINE', default='')
 
-if database_url:
+# Use SQLite for local development if DATABASE_ENGINE is set to sqlite3
+if database_engine == 'django.db.backends.sqlite3':
+    DATABASES = {
+        'default': {
+            'ENGINE': database_engine,
+            'NAME': config('DATABASE_NAME', default=BASE_DIR / 'db.sqlite3'),
+        }
+    }
+elif database_url:
     import dj_database_url
 
     DATABASES = {

@@ -14,52 +14,212 @@
             --danger-color: #dc3545;
             --warning-color: #ffc107;
             --info-color: #17a2b8;
+            --sidebar-width: 260px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
         }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Sidebar Styles */
+        #sidebar-wrapper {
+            min-height: 100vh;
+            width: var(--sidebar-width);
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 1000;
+            background: linear-gradient(180deg, #1e3c72 0%, #2a5298 100%);
+            transition: all 0.3s ease;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        
+        #sidebar-wrapper::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #sidebar-wrapper::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        #sidebar-wrapper::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        #sidebar-wrapper.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar-heading {
+            padding: 1.5rem 1.25rem;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        
+        .sidebar-heading i {
+            font-size: 1.5rem;
+            min-width: 30px;
+            text-align: center;
+        }
+        
+        .sidebar-heading .brand-text {
+            transition: opacity 0.3s ease;
+        }
+        
+        #sidebar-wrapper.collapsed .sidebar-heading .brand-text {
+            opacity: 0;
+            width: 0;
+        }
+        
+        .list-group {
+            padding: 1rem 0;
+        }
+        
+        .list-group-item {
+            background: transparent;
+            border: none;
+            padding: 0;
+            margin-bottom: 0.25rem;
+        }
+        
+        .list-group-item a {
+            display: flex;
+            align-items: center;
+            padding: 0.875rem 1.25rem;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        
+        .list-group-item a:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding-left: 1.5rem;
+        }
+        
+        .list-group-item a.active {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border-left: 3px solid white;
+        }
+        
+        .list-group-item a i {
+            min-width: 30px;
+            text-align: center;
+            font-size: 1.1rem;
+            transition: margin 0.3s ease;
+        }
+        
+        .list-group-item a .menu-text {
+            margin-left: 10px;
+            transition: opacity 0.3s ease;
+        }
+        
+        #sidebar-wrapper.collapsed .list-group-item a .menu-text {
+            opacity: 0;
+            width: 0;
+            margin: 0;
+        }
+        
+        #sidebar-wrapper.collapsed .list-group-item a {
+            justify-content: center;
+            padding: 0.875rem 0;
+        }
+        
+        #sidebar-wrapper.collapsed .list-group-item a:hover {
+            padding-left: 0;
+        }
+        
+        /* Page Content Wrapper */
+        #page-content-wrapper {
+            min-height: 100vh;
+            margin-left: var(--sidebar-width);
+            transition: all 0.3s ease;
             display: flex;
             flex-direction: column;
         }
         
-        nav {
+        #page-content-wrapper.expanded {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+        
+        /* Top Navbar */
+        .top-navbar {
             background: white;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 1rem 0;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 999;
         }
         
-        nav .navbar-brand {
-            font-weight: 700;
-            font-size: 24px;
-            color: var(--primary-color) !important;
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            font-size: 1.25rem;
+            color: #333;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: background 0.2s ease;
         }
         
+        .toggle-btn:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        
+        .navbar-nav {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        /* Main Content */
         main {
             flex: 1;
-            padding: 20px 0;
-        }
-        
-        footer {
-            background: white;
-            border-top: 1px solid #dee2e6;
-            padding: 20px 0;
-            margin-top: auto;
-            text-align: center;
-            color: #6c757d;
-            font-size: 14px;
+            padding: 20px;
         }
         
         .container {
             max-width: 1200px;
         }
         
+        /* Footer */
+        footer {
+            background: white;
+            border-top: 1px solid #dee2e6;
+            padding: 15px 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 14px;
+        }
+        
+        /* Alerts */
         .alert {
             border-radius: 4px;
             margin-bottom: 20px;
         }
         
+        /* Links */
         a {
             color: var(--primary-color);
             text-decoration: none;
@@ -68,53 +228,168 @@
         a:hover {
             text-decoration: underline;
         }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            #sidebar-wrapper {
+                margin-left: calc(-1 * var(--sidebar-width));
+            }
+            
+            #sidebar-wrapper.toggled {
+                margin-left: 0;
+            }
+            
+            #page-content-wrapper {
+                margin-left: 0;
+            }
+            
+            #page-content-wrapper.expanded {
+                margin-left: 0;
+            }
+        }
+        
+        /* Overlay for mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+        
+        .sidebar-overlay.active {
+            display: block;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light">
-        <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="fas fa-ship"></i> FreightDash
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">TCE Calculator</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/">Admin Panel</a>
-                    </li>
-                </ul>
+    <!-- Sidebar Overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <div id="sidebar-wrapper">
+        <div class="sidebar-heading">
+            <i class="fas fa-ship"></i>
+            <span class="brand-text">FreightDash</span>
+        </div>
+        <div class="list-group">
+            {% for item in menu_items %}
+            <div class="list-group-item">
+                <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">
+                    <i class="{{ item.icon }}"></i>
+                    <span class="menu-text">{{ item.title }}</span>
+                </a>
             </div>
+            {% empty %}
+            <!-- Default menu items if none configured -->
+            <div class="list-group-item">
+                <a href="/" class="{% if request.path == '/' %}active{% endif %}">
+                    <i class="fas fa-calculator"></i>
+                    <span class="menu-text">TCE Calculator</span>
+                </a>
+            </div>
+            <div class="list-group-item">
+                <a href="/admin/">
+                    <i class="fas fa-cog"></i>
+                    <span class="menu-text">Admin Panel</span>
+                </a>
+            </div>
+            {% endfor %}
         </div>
-    </nav>
+    </div>
 
-    <main>
-        <div class="container">
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
+    <!-- Page Content -->
+    <div id="page-content-wrapper">
+        <!-- Top Navbar -->
+        <nav class="top-navbar">
+            <button class="toggle-btn" id="sidebarToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/database-tools/">
+                        <i class="fas fa-database"></i> Database Tools
+                    </a>
+                </li>
+            </ul>
+        </nav>
 
-            {% block content %}{% endblock %}
-        </div>
-    </main>
+        <!-- Main Content -->
+        <main>
+            <div class="container">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
 
-    <footer>
-        <div class="container">
-            <p>&copy; 2024 FreightDash - Freight Rate & TCE Calculator | <a href="/admin/">Admin</a></p>
-        </div>
-    </footer>
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2024 FreightDash - Freight Rate & TCE Calculator | <a href="/admin/">Admin</a> | <a href="/admin/database-tools/">Database Tools</a></p>
+        </footer>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sidebar toggle functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const sidebarWrapper = document.getElementById('sidebar-wrapper');
+            const pageContentWrapper = document.getElementById('page-content-wrapper');
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            
+            // Check if mobile
+            const isMobile = window.innerWidth <= 768;
+            
+            // Load saved state from localStorage
+            const savedState = localStorage.getItem('sidebarCollapsed');
+            if (savedState === 'true' && !isMobile) {
+                sidebarWrapper.classList.add('collapsed');
+                pageContentWrapper.classList.add('expanded');
+            }
+            
+            // Toggle sidebar
+            sidebarToggle.addEventListener('click', function() {
+                if (isMobile) {
+                    sidebarWrapper.classList.toggle('toggled');
+                    sidebarOverlay.classList.toggle('active');
+                } else {
+                    sidebarWrapper.classList.toggle('collapsed');
+                    pageContentWrapper.classList.toggle('expanded');
+                    
+                    // Save state to localStorage
+                    const isCollapsed = sidebarWrapper.classList.contains('collapsed');
+                    localStorage.setItem('sidebarCollapsed', isCollapsed);
+                }
+            });
+            
+            // Close sidebar on overlay click (mobile)
+            sidebarOverlay.addEventListener('click', function() {
+                sidebarWrapper.classList.remove('toggled');
+                sidebarOverlay.classList.remove('active');
+            });
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                const isMobileNow = window.innerWidth <= 768;
+                if (!isMobileNow) {
+                    sidebarOverlay.classList.remove('active');
+                    sidebarWrapper.classList.remove('toggled');
+                }
+            });
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

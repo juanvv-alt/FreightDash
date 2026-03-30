@@ -14,8 +14,46 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 
+from .models import MenuItem
+
 
 BACKUP_APP_LABELS = ("core", "voyage")
+
+
+class MenuItemAdmin(admin.ModelAdmin):
+    """Admin configuration for Menu Items."""
+    list_display = ('title', 'url', 'icon', 'order', 'is_active', 'created_at', 'updated_at')
+    list_editable = ('order', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('title', 'url')
+    ordering = ('order', 'title')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('title', 'url', 'icon', 'order', 'is_active')
+        }),
+        ('Help Text', {
+            'classes': ('collapse',),
+            'fields': (),
+            'description': (
+                '<p><strong>Icon examples:</strong></p>'
+                '<ul>'
+                '<li><i class="fas fa-ship"></i> fas fa-ship</li>'
+                '<li><i class="fas fa-home"></i> fas fa-home</li>'
+                '<li><i class="fas fa-calculator"></i> fas fa-calculator</li>'
+                '<li><i class="fas fa-cog"></i> fas fa-cog</li>'
+                '<li><i class="fas fa-database"></i> fas fa-database</li>'
+                '<li><i class="fas fa-chart-line"></i> fas fa-chart-line</li>'
+                '</ul>'
+                '<p><strong>URL examples:</strong></p>'
+                '<ul>'
+                '<li>/ - Home</li>'
+                '<li>/admin/ - Admin Panel</li>'
+                '<li>/admin/database-tools/ - Database Tools</li>'
+                '</ul>'
+            )
+        }),
+    )
 
 
 class RestoreBackupForm(forms.Form):
@@ -105,6 +143,10 @@ def database_tools_view(request):
 		"restore_form": restore_form,
 	}
 	return TemplateResponse(request, "admin/database_tools.html", context)
+
+
+# Register the MenuItem model
+admin.site.register(MenuItem, MenuItemAdmin)
 
 
 _original_get_urls = admin.site.get_urls
