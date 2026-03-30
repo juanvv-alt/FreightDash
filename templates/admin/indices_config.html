@@ -1,0 +1,87 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width: 1200px;">
+    <h1>Indices Display Config</h1>
+    <p>Select which indices are shown under each vessel tab, reorder them, or remove them.</p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 16px 0;">
+            <h2 style="margin-top: 0;">Add New Index</h2>
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
+                <div>
+                    <label>Name</label>
+                    <input type="text" name="new_name" style="width: 100%;">
+                </div>
+                <div>
+                    <label>Vessel</label>
+                    <select name="new_vessel_size" style="width: 100%;">
+                        {% for key, label in vessel_choices %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>Order</label>
+                    <input type="number" name="new_order" value="100" min="0" style="width: 100%;">
+                </div>
+                <div>
+                    <label><input type="checkbox" name="new_is_active" checked> Active</label>
+                </div>
+            </div>
+        </div>
+
+        {% for vessel_key, items in grouped_indices.items %}
+        <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 16px 0;">
+            <h2 style="margin-top: 0; text-transform: capitalize;">{{ vessel_key }}</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Name</th>
+                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Vessel Tab</th>
+                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Order</th>
+                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Active</th>
+                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Remove</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for idx in items %}
+                    <tr>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">{{ idx.name }}</td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
+                            <select name="vessel_size_{{ idx.id }}">
+                                {% for key, label in vessel_choices %}
+                                <option value="{{ key }}" {% if idx.vessel_size == key %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
+                            <input type="number" name="order_{{ idx.id }}" value="{{ idx.order }}" min="0" style="width: 90px;">
+                        </td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
+                            <input type="checkbox" name="is_active_{{ idx.id }}" {% if idx.is_active %}checked{% endif %}>
+                        </td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
+                            <input type="checkbox" name="remove_{{ idx.id }}">
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" style="padding: 8px; color: #666;">No indices configured for this vessel.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="default">Save Configuration</button>
+    </form>
+
+    <p style="margin-top: 14px;">
+        Upload values page: <a href="{% url 'admin:indices-upload' %}">Upload Baltic Indices</a>
+    </p>
+</div>
+{% endblock %}

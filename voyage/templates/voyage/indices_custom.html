@@ -98,6 +98,26 @@
         gap: 8px;
         flex-wrap: wrap;
     }
+
+    .range-fallback {
+        display: none;
+        border: 1px solid #d9dde2;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 8px;
+        background: #f8fafc;
+    }
+
+    .range-fallback.active {
+        display: block;
+    }
+
+    .quick-range-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
 </style>
 {% endblock %}
 
@@ -132,6 +152,7 @@
                 <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
                 <input type="text" id="dateRangeDisplayLoad" class="form-control" readonly>
             </div>
+            <div id="rangeFallbackLoad" class="range-fallback"></div>
             <input type="hidden" id="startDateInputLoad" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
             <input type="hidden" id="endDateInputLoad" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
         </div>
@@ -175,6 +196,7 @@
                 <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
                 <input type="text" id="dateRangeDisplayApply" class="form-control" readonly>
             </div>
+            <div id="rangeFallbackApply" class="range-fallback"></div>
             <input type="hidden" id="startDateInputApply" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
             <input type="hidden" id="endDateInputApply" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
             <button type="submit" class="btn btn-primary w-100">Apply</button>
@@ -279,6 +301,8 @@
         const startDateInputApply = document.getElementById('startDateInputApply');
         const endDateInputApply = document.getElementById('endDateInputApply');
         const dateRangeDisplayApply = document.getElementById('dateRangeDisplayApply');
+        const rangeFallbackLoad = document.getElementById('rangeFallbackLoad');
+        const rangeFallbackApply = document.getElementById('rangeFallbackApply');
 
         function syncHiddenInputs() {
             hiddenInputs.innerHTML = '';
@@ -369,41 +393,138 @@
             }
         });
 
-        function setupRangePicker(displayEl, startEl, endEl) {
-            const startMoment = moment(startEl.value, 'YYYY-MM-DD');
-            const endMoment = moment(endEl.value, 'YYYY-MM-DD');
-            const allStart = moment('1990-01-01', 'YYYY-MM-DD');
-
-            function onRangeApplied(start, end) {
-                startEl.value = start.format('YYYY-MM-DD');
-                endEl.value = end.format('YYYY-MM-DD');
-                displayEl.value = start.format('YYYY-MM-DD') + ' ~ ' + end.format('YYYY-MM-DD');
-            }
-
-            $(displayEl).daterangepicker(
-                {
-                    startDate: startMoment,
-                    endDate: endMoment,
-                    autoUpdateInput: true,
-                    locale: {
-                        format: 'YYYY-MM-DD',
-                    },
-                    ranges: {
-                        'MTD': [moment().startOf('month'), moment()],
-                        'YTD': [moment().startOf('year'), moment()],
-                        '1Y': [moment().subtract(1, 'year'), moment()],
-                        '2Y': [moment().subtract(2, 'year'), moment()],
-                        '5Y': [moment().subtract(5, 'year'), moment()],
-                        'All': [allStart, moment()],
-                    },
-                },
-                onRangeApplied
-            );
-            onRangeApplied(startMoment, endMoment);
+        function formatDateLocal(dateObj) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + d;
         }
 
-        setupRangePicker(dateRangeDisplayLoad, startDateInputLoad, endDateInputLoad);
-        setupRangePicker(dateRangeDisplayApply, startDateInputApply, endDateInputApply);
+        function setupRangePicker(displayEl, startEl, endEl, fallbackEl) {
+            function setRange(start, end) {
+                startEl.value = start;
+                endEl.value = end;
+                displayEl.value = start + ' ~ ' + end;
+            }
+
+            const hasDatePickerLib = !!(window.jQuery && window.jQuery.fn && window.jQuery.fn.daterangepicker && window.moment);
+            if (hasDatePickerLib) {
+                const startMoment = moment(startEl.value, 'YYYY-MM-DD');
+                const endMoment = moment(endEl.value, 'YYYY-MM-DD');
+                const allStart = moment('1990-01-01', 'YYYY-MM-DD');
+
+                function onRangeApplied(start, end) {
+                    setRange(start.format('YYYY-MM-DD'), end.format('YYYY-MM-DD'));
+                }
+
+                $(displayEl).daterangepicker(
+                    {
+                        startDate: startMoment,
+                        endDate: endMoment,
+                        autoUpdateInput: true,
+                        locale: {
+                            format: 'YYYY-MM-DD',
+                        },
+                        ranges: {
+                            'MTD': [moment().startOf('month'), moment()],
+                            'YTD': [moment().startOf('year'), moment()],
+                            '1Y': [moment().subtract(1, 'year'), moment()],
+                            '2Y': [moment().subtract(2, 'year'), moment()],
+                            '5Y': [moment().subtract(5, 'year'), moment()],
+                            'All': [allStart, moment()],
+                        },
+                    },
+                    onRangeApplied
+                );
+                onRangeApplied(startMoment, endMoment);
+                return;
+            }
+
+            fallbackEl.classList.add('active');
+            fallbackEl.innerHTML = '';
+            const quickButtons = document.createElement('div');
+            quickButtons.className = 'quick-range-buttons';
+
+            ['MTD', 'YTD', '1Y', '2Y', '5Y', 'ALL'].forEach(function(key) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-outline-secondary btn-sm';
+                btn.textContent = key === 'ALL' ? 'All' : key;
+                btn.dataset.range = key;
+                quickButtons.appendChild(btn);
+            });
+
+            const group = document.createElement('div');
+            group.className = 'input-group';
+
+            const startInput = document.createElement('input');
+            startInput.type = 'date';
+            startInput.className = 'form-control';
+            startInput.value = startEl.value;
+
+            const between = document.createElement('span');
+            between.className = 'input-group-text';
+            between.textContent = 'to';
+
+            const endInput = document.createElement('input');
+            endInput.type = 'date';
+            endInput.className = 'form-control';
+            endInput.value = endEl.value;
+
+            group.appendChild(startInput);
+            group.appendChild(between);
+            group.appendChild(endInput);
+
+            fallbackEl.appendChild(quickButtons);
+            fallbackEl.appendChild(group);
+
+            setRange(startEl.value, endEl.value);
+
+            displayEl.addEventListener('click', function() {
+                fallbackEl.classList.toggle('active');
+            });
+
+            startInput.addEventListener('change', function() {
+                if (startInput.value && endInput.value) {
+                    setRange(startInput.value, endInput.value);
+                }
+            });
+
+            endInput.addEventListener('change', function() {
+                if (startInput.value && endInput.value) {
+                    setRange(startInput.value, endInput.value);
+                }
+            });
+
+            quickButtons.querySelectorAll('button').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const now = new Date();
+                    const key = btn.dataset.range;
+                    let start = new Date(now);
+                    if (key === 'MTD') {
+                        start = new Date(now.getFullYear(), now.getMonth(), 1);
+                    } else if (key === 'YTD') {
+                        start = new Date(now.getFullYear(), 0, 1);
+                    } else if (key === '1Y') {
+                        start.setFullYear(now.getFullYear() - 1);
+                    } else if (key === '2Y') {
+                        start.setFullYear(now.getFullYear() - 2);
+                    } else if (key === '5Y') {
+                        start.setFullYear(now.getFullYear() - 5);
+                    } else if (key === 'ALL') {
+                        start = new Date(1990, 0, 1);
+                    }
+                    const startFormatted = formatDateLocal(start);
+                    const endFormatted = formatDateLocal(now);
+                    startInput.value = startFormatted;
+                    endInput.value = endFormatted;
+                    setRange(startFormatted, endFormatted);
+                });
+            });
+        }
+
+        setupRangePicker(dateRangeDisplayLoad, startDateInputLoad, endDateInputLoad, rangeFallbackLoad);
+        setupRangePicker(dateRangeDisplayApply, startDateInputApply, endDateInputApply, rangeFallbackApply);
 
         renderTokens();
     });

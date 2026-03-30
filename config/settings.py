@@ -231,7 +231,12 @@ JAZZMIN_SETTINGS = {
                 "name": "Upload Baltic Indices",
                 "url": "admin:indices-upload",
                 "icon": "fas fa-file-upload",
-            }
+            },
+            {
+                "name": "Indices Display Config",
+                "url": "admin:indices-config",
+                "icon": "fas fa-sliders-h",
+            },
         ]
     },
 }
