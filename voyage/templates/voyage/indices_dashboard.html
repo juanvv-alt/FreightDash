@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load voyage_extras %}
+
+{% block title %}{{ vessel_label }} Indices - FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+    .indices-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .indices-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #222;
+    }
+
+    .indices-controls,
+    .indices-table-card {
+        background: #fff;
+        border: 1px solid #e2e5e9;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+
+    .indices-selector {
+        max-height: 96px;
+        overflow-y: auto;
+        border: 1px solid #e2e5e9;
+        border-radius: 6px;
+        padding: 8px;
+        background: #fafbfc;
+    }
+
+    .index-check {
+        display: inline-block;
+        margin: 4px 8px 4px 0;
+        font-size: 13px;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+        border: 1px solid #e2e5e9;
+        border-radius: 6px;
+    }
+
+    .table-scroll table {
+        margin-bottom: 0;
+        min-width: 900px;
+    }
+
+    .empty-data-note {
+        margin-top: 12px;
+        font-size: 13px;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="indices-header">
+    <div>
+        <h1>{{ vessel_label }}</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0 mt-1">
+                <li class="breadcrumb-item"><a href="/">Home</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'voyage:indices' %}">Freight Calculator</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ vessel_label }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<form method="get" class="indices-controls">
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <label class="form-label fw-semibold">Indices</label>
+            <div class="indices-selector">
+                {% for index_name in all_indices %}
+                <label class="index-check">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        name="indices"
+                        value="{{ index_name }}"
+                        {% if index_name in selected_indices %}checked{% endif %}
+                    >
+                    {{ index_name }}
+                </label>
+                {% endfor %}
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="selectAllIndices">Select All</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="clearAllIndices">Clear All</button>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <label class="form-label fw-semibold">Date Range</label>
+            <div class="input-group mb-2">
+                <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                <input type="date" class="form-control" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+                <span class="input-group-text">to</span>
+                <input type="date" class="form-control" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Apply</button>
+        </div>
+    </div>
+</form>
+
+<div class="indices-table-card">
+    <div class="table-scroll">
+        <table class="table table-sm table-striped table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>Date</th>
+                    {% for index_name in selected_indices %}
+                    <th>{{ index_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% if not selected_indices %}
+                <tr>
+                    <td colspan="2">No indices selected. Choose one or more indices and click Apply.</td>
+                </tr>
+                {% else %}
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.date|date:'Y-m-d' }}</td>
+                    {% for index_name in selected_indices %}
+                    <td>
+                        {% if row.values|get_item:index_name %}
+                            {{ row.values|get_item:index_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% if not has_data %}
+    <p class="empty-data-note">
+        No index values uploaded yet. This module is ready for upcoming index upload functionality.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllBtn = document.getElementById('selectAllIndices');
+        const clearAllBtn = document.getElementById('clearAllIndices');
+        const checkboxes = document.querySelectorAll('input[name="indices"]');
+
+        selectAllBtn.addEventListener('click', function() {
+            checkboxes.forEach(function(box) { box.checked = true; });
+        });
+
+        clearAllBtn.addEventListener('click', function() {
+            checkboxes.forEach(function(box) { box.checked = false; });
+        });
+    });
+</script>
+{% endblock %}

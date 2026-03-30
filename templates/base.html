@@ -130,11 +130,82 @@
             margin-left: 10px;
             transition: opacity 0.3s ease;
         }
+
+        .menu-group {
+            margin-bottom: 0.25rem;
+        }
+
+        .menu-group-toggle {
+            width: 100%;
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.8);
+            padding: 0.875rem 1.25rem;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .menu-group-toggle:hover,
+        .menu-group-toggle.open {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .menu-group-toggle i {
+            min-width: 30px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .menu-group-toggle .menu-text {
+            margin-left: 10px;
+            flex: 1;
+            text-align: left;
+        }
+
+        .menu-group-toggle .chevron {
+            font-size: 0.85rem;
+            transition: transform 0.2s ease;
+        }
+
+        .menu-group-toggle.open .chevron {
+            transform: rotate(180deg);
+        }
+
+        .menu-group-links {
+            display: none;
+            padding-left: 0.4rem;
+        }
+
+        .menu-group-links.open {
+            display: block;
+        }
+
+        .menu-group-links .list-group-item a {
+            padding-left: 2rem;
+            font-size: 0.95rem;
+        }
+
+        .menu-group-links .list-group-item a.active {
+            border-left: 3px solid #f0f4ff;
+            background: rgba(255, 255, 255, 0.2);
+        }
         
         #sidebar-wrapper.collapsed .list-group-item a .menu-text {
             opacity: 0;
             width: 0;
             margin: 0;
+        }
+
+        #sidebar-wrapper.collapsed .menu-group-toggle .menu-text,
+        #sidebar-wrapper.collapsed .menu-group-toggle .chevron {
+            display: none;
+        }
+
+        #sidebar-wrapper.collapsed .menu-group-links {
+            display: none !important;
         }
         
         #sidebar-wrapper.collapsed .list-group-item a {
@@ -299,6 +370,44 @@
                 </a>
             </div>
             {% endfor %}
+
+            <div class="menu-group">
+                <button
+                    type="button"
+                    class="menu-group-toggle {% if '/indices/' in request.path %}open{% endif %}"
+                    id="indicesMenuToggle"
+                >
+                    <i class="fas fa-circle-dot"></i>
+                    <span class="menu-text">Indices</span>
+                    <i class="fas fa-chevron-down chevron"></i>
+                </button>
+                <div class="menu-group-links {% if '/indices/' in request.path %}open{% endif %}" id="indicesMenuLinks">
+                    <div class="list-group-item">
+                        <a href="{% url 'voyage:indices_by_vessel' vessel='capesize' %}" class="{% if request.path == '/indices/capesize/' %}active{% endif %}">
+                            <i class="far fa-circle"></i>
+                            <span class="menu-text">Capesize</span>
+                        </a>
+                    </div>
+                    <div class="list-group-item">
+                        <a href="{% url 'voyage:indices_by_vessel' vessel='panamax' %}" class="{% if request.path == '/indices/panamax/' %}active{% endif %}">
+                            <i class="far fa-circle"></i>
+                            <span class="menu-text">Panamax</span>
+                        </a>
+                    </div>
+                    <div class="list-group-item">
+                        <a href="{% url 'voyage:indices_by_vessel' vessel='supramax' %}" class="{% if request.path == '/indices/supramax/' %}active{% endif %}">
+                            <i class="far fa-circle"></i>
+                            <span class="menu-text">Supramax</span>
+                        </a>
+                    </div>
+                    <div class="list-group-item">
+                        <a href="{% url 'voyage:indices_by_vessel' vessel='handysize' %}" class="{% if request.path == '/indices/handysize/' %}active{% endif %}">
+                            <i class="far fa-circle"></i>
+                            <span class="menu-text">Handysize</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -309,13 +418,7 @@
             <button class="toggle-btn" id="sidebarToggle">
                 <i class="fas fa-bars"></i>
             </button>
-            <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" href="/admin/database-tools/">
-                        <i class="fas fa-database"></i> Database Tools
-                    </a>
-                </li>
-            </ul>
+            <ul class="navbar-nav"></ul>
         </nav>
 
         <!-- Main Content -->
@@ -336,7 +439,7 @@
 
         <!-- Footer -->
         <footer>
-            <p>&copy; 2024 FreightDash - Freight Rate & TCE Calculator | <a href="/admin/">Admin</a> | <a href="/admin/database-tools/">Database Tools</a></p>
+            <p>&copy; 2024 FreightDash - Freight Rate & TCE Calculator | <a href="/admin/">Admin</a></p>
         </footer>
     </div>
 
@@ -348,6 +451,8 @@
             const pageContentWrapper = document.getElementById('page-content-wrapper');
             const sidebarToggle = document.getElementById('sidebarToggle');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
+            const indicesMenuToggle = document.getElementById('indicesMenuToggle');
+            const indicesMenuLinks = document.getElementById('indicesMenuLinks');
             
             // Check if mobile
             const isMobile = window.innerWidth <= 768;
@@ -379,6 +484,13 @@
                 sidebarWrapper.classList.remove('toggled');
                 sidebarOverlay.classList.remove('active');
             });
+
+            if (indicesMenuToggle && indicesMenuLinks) {
+                indicesMenuToggle.addEventListener('click', function() {
+                    indicesMenuToggle.classList.toggle('open');
+                    indicesMenuLinks.classList.toggle('open');
+                });
+            }
             
             // Handle window resize
             window.addEventListener('resize', function() {

@@ -1,6 +1,9 @@
-from django.shortcuts import render
+from datetime import timedelta
+
+from django.shortcuts import redirect, render
 from django.db import DatabaseError, ProgrammingError
 from django.db.utils import OperationalError
+from django.utils import timezone
 import logging
 from .models import RouteParameters
 from .forms import TCECalculatorForm
@@ -12,6 +15,99 @@ from .calculators import (
 
 
 logger = logging.getLogger(__name__)
+
+
+VESSEL_INDEX_GROUPS = {
+    'capesize': {
+        'label': 'Capesize',
+        'indices': [
+            'C2', 'C3', 'C5', 'C7', 'C8_14', 'C9_14', 'C10_14', 'C14', 'C16', 'C17',
+            'BCI 5TC', 'BCI 4TC', 'BCI Index', 'Minicape (Old)', 'Minicape (Broker)',
+            'Minicape (AVG)', 'Forward Capesize (Current)', 'Forward Capesize (Next MTH)',
+            'Forward Panamax (Current)', 'Forward Panamax (Next Mth)',
+            'Forward Minicape (Old) (Current)', 'Forward Minicape (Old) (Next Mth)',
+            'Forward Minicape (Broker) (Current)', 'Forward Minicape (Broker) (Next Mth)',
+        ],
+    },
+    'panamax': {
+        'label': 'Panamax',
+        'indices': ['P1A_82', 'P2A_82', 'P3A_82', 'P4A_82', 'P5_82', 'BPI 82TC', 'BPI Index'],
+    },
+    'supramax': {
+        'label': 'Supramax',
+        'indices': ['S1B_58', 'S1C_58', 'S2_58', 'S3_58', 'S4A_58', 'S4B_58', 'BSI 58TC', 'BSI Index'],
+    },
+    'handysize': {
+        'label': 'Handysize',
+        'indices': ['HS1', 'HS2', 'HS3', 'HS4', 'HS5', 'BHSI 38TC', 'BHSI Index'],
+    },
+}
+
+
+def indices_redirect(request):
+    return redirect('voyage:indices_by_vessel', vessel='capesize')
+
+
+def indices_dashboard(request, vessel):
+    vessel_key = vessel.lower()
+    if vessel_key not in VESSEL_INDEX_GROUPS:
+        return redirect('voyage:indices_by_vessel', vessel='capesize')
+
+    vessel_config = VESSEL_INDEX_GROUPS[vessel_key]
+    all_indices = vessel_config['indices']
+    today = timezone.localdate()
+
+    default_start = today - timedelta(days=30)
+    start_date_raw = request.GET.get('start_date', default_start.isoformat())
+    end_date_raw = request.GET.get('end_date', today.isoformat())
+
+    try:
+        start_date = timezone.datetime.strptime(start_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        start_date = default_start
+
+    try:
+        end_date = timezone.datetime.strptime(end_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        end_date = today
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    if (end_date - start_date).days > 365:
+        start_date = end_date - timedelta(days=365)
+
+    selected_indices = request.GET.getlist('indices')
+    selected_indices = [index for index in selected_indices if index in all_indices]
+    if 'indices' not in request.GET:
+        selected_indices = list(all_indices)
+
+    total_days = (end_date - start_date).days + 1
+    date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
+    rows = []
+    for date_value in date_rows:
+        rows.append(
+            {
+                'date': date_value,
+                'values': {index_name: None for index_name in selected_indices},
+            }
+        )
+
+    context = {
+        'vessel_key': vessel_key,
+        'vessel_label': vessel_config['label'],
+        'vessel_menu': [
+            {'key': key, 'label': config['label']}
+            for key, config in VESSEL_INDEX_GROUPS.items()
+        ],
+        'all_indices': all_indices,
+        'selected_indices': selected_indices,
+        'start_date': start_date,
+        'end_date': end_date,
+        'rows': rows,
+        'has_data': False,
+    }
+    return render(request, 'voyage/indices_dashboard.html', context)
 
 
 def tce_calculator(request):

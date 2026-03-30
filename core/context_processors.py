@@ -33,4 +33,9 @@ def menu_items(request):
     if not items:
         items = DEFAULT_MENU_ITEMS
 
+    items = [
+        item for item in items
+        if not str(item.get('url') if isinstance(item, dict) else item.url).startswith('/admin/database-tools/')
+    ]
+
     return {'menu_items': items}
