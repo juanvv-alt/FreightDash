@@ -19,8 +19,12 @@ done
 echo "[entrypoint] Running migrations"
 python manage.py migrate --noinput
 
-echo "[entrypoint] Seeding sample routes"
-python manage.py create_sample_routes || true
+if [ "${RUN_SAMPLE_SEED:-false}" = "true" ]; then
+    echo "[entrypoint] Seeding sample routes"
+    python manage.py create_sample_routes || true
+else
+    echo "[entrypoint] Skipping sample route seeding (RUN_SAMPLE_SEED is not true)"
+fi
 
 echo "[entrypoint] Creating default admin user"
 python manage.py create_admin || true
