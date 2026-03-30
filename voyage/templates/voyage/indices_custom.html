@@ -4,6 +4,7 @@
 {% block title %}Custom Indices - FreightDash{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
 <style>
     .indices-header {
         display: flex;
@@ -128,10 +129,11 @@
         <div class="col-md-4">
             <label class="form-label fw-semibold">Date Range</label>
             <div class="input-group">
-                <input type="date" class="form-control" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
-                <span class="input-group-text">to</span>
-                <input type="date" class="form-control" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+                <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                <input type="text" id="dateRangeDisplayLoad" class="form-control" readonly>
             </div>
+            <input type="hidden" id="startDateInputLoad" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+            <input type="hidden" id="endDateInputLoad" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
         </div>
         <div class="col-md-3">
             <button type="submit" class="btn btn-outline-primary w-100">Load</button>
@@ -171,10 +173,10 @@
             <label class="form-label fw-semibold">Date Range</label>
             <div class="input-group mb-2">
                 <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
-                <input type="date" class="form-control" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
-                <span class="input-group-text">to</span>
-                <input type="date" class="form-control" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+                <input type="text" id="dateRangeDisplayApply" class="form-control" readonly>
             </div>
+            <input type="hidden" id="startDateInputApply" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+            <input type="hidden" id="endDateInputApply" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
             <button type="submit" class="btn btn-primary w-100">Apply</button>
         </div>
     </div>
@@ -255,6 +257,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
 {{ all_indices|json_script:"all-indices-data" }}
 {{ selected_indices|json_script:"selected-indices-data" }}
 <script>
@@ -268,6 +273,12 @@
         const savePresetHiddenInputs = document.getElementById('savePresetHiddenInputs');
         const selectAllBtn = document.getElementById('selectAllIndices');
         const clearAllBtn = document.getElementById('clearAllIndices');
+        const startDateInputLoad = document.getElementById('startDateInputLoad');
+        const endDateInputLoad = document.getElementById('endDateInputLoad');
+        const dateRangeDisplayLoad = document.getElementById('dateRangeDisplayLoad');
+        const startDateInputApply = document.getElementById('startDateInputApply');
+        const endDateInputApply = document.getElementById('endDateInputApply');
+        const dateRangeDisplayApply = document.getElementById('dateRangeDisplayApply');
 
         function syncHiddenInputs() {
             hiddenInputs.innerHTML = '';
@@ -357,6 +368,42 @@
                 tokenInput.value = '';
             }
         });
+
+        function setupRangePicker(displayEl, startEl, endEl) {
+            const startMoment = moment(startEl.value, 'YYYY-MM-DD');
+            const endMoment = moment(endEl.value, 'YYYY-MM-DD');
+            const allStart = moment('1990-01-01', 'YYYY-MM-DD');
+
+            function onRangeApplied(start, end) {
+                startEl.value = start.format('YYYY-MM-DD');
+                endEl.value = end.format('YYYY-MM-DD');
+                displayEl.value = start.format('YYYY-MM-DD') + ' ~ ' + end.format('YYYY-MM-DD');
+            }
+
+            $(displayEl).daterangepicker(
+                {
+                    startDate: startMoment,
+                    endDate: endMoment,
+                    autoUpdateInput: true,
+                    locale: {
+                        format: 'YYYY-MM-DD',
+                    },
+                    ranges: {
+                        'MTD': [moment().startOf('month'), moment()],
+                        'YTD': [moment().startOf('year'), moment()],
+                        '1Y': [moment().subtract(1, 'year'), moment()],
+                        '2Y': [moment().subtract(2, 'year'), moment()],
+                        '5Y': [moment().subtract(5, 'year'), moment()],
+                        'All': [allStart, moment()],
+                    },
+                },
+                onRangeApplied
+            );
+            onRangeApplied(startMoment, endMoment);
+        }
+
+        setupRangePicker(dateRangeDisplayLoad, startDateInputLoad, endDateInputLoad);
+        setupRangePicker(dateRangeDisplayApply, startDateInputApply, endDateInputApply);
 
         renderTokens();
     });

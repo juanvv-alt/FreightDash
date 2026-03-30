@@ -143,10 +143,15 @@
             <label class="form-label fw-semibold">Date Range</label>
             <div class="input-group mb-2">
                 <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
-                <input type="date" class="form-control" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
-                <span class="input-group-text">to</span>
-                <input type="date" class="form-control" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+                <input
+                    type="text"
+                    id="dateRangeDisplay"
+                    class="form-control"
+                    readonly
+                >
             </div>
+            <input type="hidden" id="startDateInput" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+            <input type="hidden" id="endDateInput" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
             <button type="submit" class="btn btn-primary w-100">Apply</button>
         </div>
     </div>
