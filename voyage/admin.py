@@ -164,7 +164,8 @@ def upload_indices_view(request):
                     name_to_index[index_name] = new_index
                     created_index_count += 1
 
-                upsert_count = 0
+                insert_count = 0
+                skipped_existing_count = 0
                 for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
                     if not row:
                         continue
@@ -181,16 +182,20 @@ def upload_indices_view(request):
                         except (TypeError, ValueError):
                             continue
 
-                        DailyIndexValue.objects.update_or_create(
+                        _, created = DailyIndexValue.objects.get_or_create(
                             index=name_to_index[index_name],
                             date=row_date,
                             defaults={'value': numeric_value},
                         )
-                        upsert_count += 1
+                        if created:
+                            insert_count += 1
+                        else:
+                            skipped_existing_count += 1
 
             messages.success(
                 request,
-                f'Upload completed. Upserted {upsert_count} daily values. '
+                f'Upload completed. Inserted {insert_count} new daily values. '
+                f'Skipped {skipped_existing_count} existing values. '
                 f'Created {created_index_count} new available indices.',
             )
             return redirect(reverse('admin:indices-upload'))

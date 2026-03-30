@@ -78,7 +78,11 @@ def _indices_for_vessel(vessel_key):
 
 def _build_rows(start_date, end_date, selected_indices):
     total_days = (end_date - start_date).days + 1
-    date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
+    date_rows = [
+        end_date - timedelta(days=offset)
+        for offset in range(total_days)
+        if (end_date - timedelta(days=offset)).weekday() < 5
+    ]
     values_map = {}
 
     if selected_indices:
