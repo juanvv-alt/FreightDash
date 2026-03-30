@@ -225,6 +225,15 @@ JAZZMIN_SETTINGS = {
     "show_ui_builder": False,
     "language_chooser": False,
     "search_model": "auth.User",
+    "custom_links": {
+        "voyage": [
+            {
+                "name": "Upload Baltic Indices",
+                "url": "admin:indices-upload",
+                "icon": "fas fa-file-upload",
+            }
+        ]
+    },
 }
 
 # Jazzmin UI Tweaks

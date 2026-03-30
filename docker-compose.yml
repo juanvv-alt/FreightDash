@@ -6,9 +6,9 @@ services:
     image: postgres:15-alpine
     container_name: freightdash_db
     environment:
-      POSTGRES_DB: ${DATABASE_NAME:-freightdash}
-      POSTGRES_USER: ${DATABASE_USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      POSTGRES_DB: ${COMPOSE_DB_NAME:-freightdash}
+      POSTGRES_USER: ${COMPOSE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${COMPOSE_DB_PASSWORD:-changeme}
       # Singapore timezone
       TZ: Asia/Singapore
     ports:
@@ -16,7 +16,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${COMPOSE_DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,9 +34,9 @@ services:
     environment:
       # Database Configuration
       DATABASE_ENGINE: django.db.backends.postgresql
-      DATABASE_NAME: ${DATABASE_NAME:-freightdash}
-      DATABASE_USER: ${DATABASE_USER:-postgres}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-changeme}
+      DATABASE_NAME: ${COMPOSE_DB_NAME:-freightdash}
+      DATABASE_USER: ${COMPOSE_DB_USER:-postgres}
+      DATABASE_PASSWORD: ${COMPOSE_DB_PASSWORD:-changeme}
       DATABASE_HOST: db
       DATABASE_PORT: 5432
       # Django Settings

@@ -6,7 +6,7 @@ from django.db.utils import OperationalError
 from django.utils import timezone
 import logging
 from .models import RouteParameters
-from .models import CustomIndexPreset
+from .models import AvailableIndex, CustomIndexPreset, DailyIndexValue
 from .forms import TCECalculatorForm
 from .calculators import (
     calculate_fuel_and_days,
@@ -46,6 +46,14 @@ VESSEL_INDEX_GROUPS = {
 
 
 def _all_known_indices():
+    db_indices = list(
+        AvailableIndex.objects.filter(is_active=True)
+        .order_by('vessel_size', 'order', 'name')
+        .values_list('name', flat=True)
+    )
+    if db_indices:
+        return db_indices
+
     seen = set()
     ordered = []
     for config in VESSEL_INDEX_GROUPS.values():
@@ -55,6 +63,46 @@ def _all_known_indices():
             seen.add(index_name)
             ordered.append(index_name)
     return ordered
+
+
+def _indices_for_vessel(vessel_key):
+    db_indices = list(
+        AvailableIndex.objects.filter(is_active=True, vessel_size=vessel_key)
+        .order_by('order', 'name')
+        .values_list('name', flat=True)
+    )
+    if db_indices:
+        return db_indices
+    return VESSEL_INDEX_GROUPS[vessel_key]['indices']
+
+
+def _build_rows(start_date, end_date, selected_indices):
+    total_days = (end_date - start_date).days + 1
+    date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
+    values_map = {}
+
+    if selected_indices:
+        for value in DailyIndexValue.objects.filter(
+            index__name__in=selected_indices,
+            date__gte=start_date,
+            date__lte=end_date,
+            index__is_active=True,
+        ).select_related('index'):
+            values_map[(value.date, value.index.name)] = value.value
+
+    rows = []
+    for date_value in date_rows:
+        rows.append(
+            {
+                'date': date_value,
+                'values': {
+                    index_name: values_map.get((date_value, index_name))
+                    for index_name in selected_indices
+                },
+            }
+        )
+
+    return rows, bool(values_map)
 
 
 def indices_redirect(request):
@@ -67,7 +115,7 @@ def indices_dashboard(request, vessel):
         return redirect('voyage:indices_by_vessel', vessel='capesize')
 
     vessel_config = VESSEL_INDEX_GROUPS[vessel_key]
-    all_indices = vessel_config['indices']
+    all_indices = _indices_for_vessel(vessel_key)
     today = timezone.localdate()
 
     default_start = today - timedelta(days=30)
@@ -105,16 +153,7 @@ def indices_dashboard(request, vessel):
             seen_indices.add(cleaned)
             selected_indices.append(cleaned)
 
-    total_days = (end_date - start_date).days + 1
-    date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
-    rows = []
-    for date_value in date_rows:
-        rows.append(
-            {
-                'date': date_value,
-                'values': {index_name: None for index_name in selected_indices},
-            }
-        )
+    rows, has_data = _build_rows(start_date, end_date, selected_indices)
 
     context = {
         'vessel_key': vessel_key,
@@ -128,7 +167,7 @@ def indices_dashboard(request, vessel):
         'start_date': start_date,
         'end_date': end_date,
         'rows': rows,
-        'has_data': False,
+        'has_data': has_data,
     }
     return render(request, 'voyage/indices_dashboard.html', context)
 
@@ -211,16 +250,7 @@ def indices_custom(request):
     if not selected_indices:
         selected_indices = all_indices[:8]
 
-    total_days = (end_date - start_date).days + 1
-    date_rows = [end_date - timedelta(days=offset) for offset in range(total_days)]
-    rows = []
-    for date_value in date_rows:
-        rows.append(
-            {
-                'date': date_value,
-                'values': {index_name: None for index_name in selected_indices},
-            }
-        )
+    rows, has_data = _build_rows(start_date, end_date, selected_indices)
 
     context = {
         'all_indices': all_indices,
@@ -228,7 +258,7 @@ def indices_custom(request):
         'start_date': start_date,
         'end_date': end_date,
         'rows': rows,
-        'has_data': False,
+        'has_data': has_data,
         'presets': presets,
         'selected_preset_id': selected_preset.id if selected_preset else None,
         'selected_preset_name': selected_preset.name if selected_preset else '',

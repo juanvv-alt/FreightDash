@@ -1,6 +1,14 @@
 from django.db import models
 
 
+VESSEL_SIZE_CHOICES = [
+    ('capesize', 'Capesize'),
+    ('panamax', 'Panamax'),
+    ('supramax', 'Supramax'),
+    ('handysize', 'Handysize'),
+]
+
+
 class RouteParameters(models.Model):
     """
     Stores voyage parameters for different shipping routes.
@@ -61,3 +69,41 @@ class CustomIndexPreset(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class AvailableIndex(models.Model):
+    """Configurable list of index columns available in the UI and uploads."""
+
+    name = models.CharField(max_length=120, unique=True)
+    vessel_size = models.CharField(max_length=20, choices=VESSEL_SIZE_CHOICES)
+    order = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['vessel_size', 'order', 'name']
+        verbose_name = 'Available Index'
+        verbose_name_plural = 'Available Indices'
+
+    def __str__(self):
+        return self.name
+
+
+class DailyIndexValue(models.Model):
+    """Daily value of an index uploaded from preset spreadsheet format."""
+
+    index = models.ForeignKey(AvailableIndex, on_delete=models.CASCADE, related_name='daily_values')
+    date = models.DateField()
+    value = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', 'index__name']
+        unique_together = [('index', 'date')]
+        verbose_name = 'Daily Index Value'
+        verbose_name_plural = 'Daily Index Values'
+
+    def __str__(self):
+        return f"{self.index.name} {self.date}: {self.value}"
