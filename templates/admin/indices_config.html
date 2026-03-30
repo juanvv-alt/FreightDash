@@ -1,87 +1,154 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
-<div style="max-width: 1200px;">
+<div style="max-width: 1100px;">
     <h1>Indices Display Config</h1>
-    <p>Select which indices are shown under each vessel tab, reorder them, or remove them.</p>
+    <p>Pick a vessel tab, then drag to reorder indices, click x to hide, or type to add.</p>
 
-    <form method="post">
-        {% csrf_token %}
-
-        <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 16px 0;">
-            <h2 style="margin-top: 0;">Add New Index</h2>
-            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; align-items: end;">
-                <div>
-                    <label>Name</label>
-                    <input type="text" name="new_name" style="width: 100%;">
-                </div>
-                <div>
-                    <label>Vessel</label>
-                    <select name="new_vessel_size" style="width: 100%;">
-                        {% for key, label in vessel_choices %}
-                        <option value="{{ key }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label>Order</label>
-                    <input type="number" name="new_order" value="100" min="0" style="width: 100%;">
-                </div>
-                <div>
-                    <label><input type="checkbox" name="new_is_active" checked> Active</label>
-                </div>
-            </div>
-        </div>
-
-        {% for vessel_key, items in grouped_indices.items %}
-        <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 16px 0;">
-            <h2 style="margin-top: 0; text-transform: capitalize;">{{ vessel_key }}</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr>
-                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Name</th>
-                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Vessel Tab</th>
-                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Order</th>
-                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Active</th>
-                        <th style="text-align: left; border-bottom: 1px solid #ccc; padding: 6px;">Remove</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for idx in items %}
-                    <tr>
-                        <td style="padding: 6px; border-bottom: 1px solid #eee;">{{ idx.name }}</td>
-                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
-                            <select name="vessel_size_{{ idx.id }}">
-                                {% for key, label in vessel_choices %}
-                                <option value="{{ key }}" {% if idx.vessel_size == key %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </td>
-                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
-                            <input type="number" name="order_{{ idx.id }}" value="{{ idx.order }}" min="0" style="width: 90px;">
-                        </td>
-                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
-                            <input type="checkbox" name="is_active_{{ idx.id }}" {% if idx.is_active %}checked{% endif %}>
-                        </td>
-                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
-                            <input type="checkbox" name="remove_{{ idx.id }}">
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" style="padding: 8px; color: #666;">No indices configured for this vessel.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% endfor %}
-
-        <button type="submit" class="default">Save Configuration</button>
+    <form method="get" style="margin-bottom: 14px;">
+        <label for="vesselSelect"><strong>Vessel Tab</strong></label><br>
+        <select id="vesselSelect" name="vessel" onchange="this.form.submit()" style="min-width: 220px;">
+            {% for key, label in vessel_choices %}
+            <option value="{{ key }}" {% if selected_vessel == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
     </form>
 
-    <p style="margin-top: 14px;">
-        Upload values page: <a href="{% url 'admin:indices-upload' %}">Upload Baltic Indices</a>
+    <form method="post" id="indicesConfigForm">
+        {% csrf_token %}
+        <input type="hidden" name="vessel" value="{{ selected_vessel }}">
+        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 14px; background: #fff;">
+            <div id="tokenList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;"></div>
+            <input
+                type="text"
+                id="tokenInput"
+                list="indexSuggestions"
+                placeholder="Type an index and press Enter"
+                style="width: 100%; padding: 8px 10px;"
+            >
+            <datalist id="indexSuggestions">
+                {% for index_name in all_index_suggestions %}
+                <option value="{{ index_name }}"></option>
+                {% endfor %}
+            </datalist>
+            <div id="hiddenInputs"></div>
+        </div>
+
+        <div style="margin-top: 10px; display:flex; gap:8px; flex-wrap: wrap;">
+            <button type="button" class="button" id="clearAllBtn">Clear All</button>
+            <button type="submit" class="default">Save Configuration</button>
+        </div>
+    </form>
+
+    <p style="margin-top: 14px; color: #666;">
+        Tip: this editor controls which indices are active for the selected vessel tab and their order.
     </p>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+{{ active_indices|json_script:"activeIndicesData" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let selected = JSON.parse(document.getElementById('activeIndicesData').textContent || '[]');
+        const tokenList = document.getElementById('tokenList');
+        const tokenInput = document.getElementById('tokenInput');
+        const hiddenInputs = document.getElementById('hiddenInputs');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+
+        function syncHiddenInputs() {
+            hiddenInputs.innerHTML = '';
+            selected.forEach(function(name) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'indices';
+                input.value = name;
+                hiddenInputs.appendChild(input);
+            });
+        }
+
+        function refreshFromDom() {
+            selected = Array.from(tokenList.querySelectorAll('.cfg-token')).map(function(el) {
+                return el.dataset.name;
+            });
+            syncHiddenInputs();
+        }
+
+        function renderTokens() {
+            tokenList.innerHTML = '';
+            selected.forEach(function(name) {
+                const token = document.createElement('span');
+                token.className = 'cfg-token';
+                token.dataset.name = name;
+                token.style.cssText = 'display:inline-flex;align-items:center;gap:8px;background:#e9eef5;border:1px solid #cfd7e3;border-radius:6px;padding:6px 10px;';
+
+                const drag = document.createElement('span');
+                drag.className = 'drag-handle';
+                drag.textContent = '≡';
+                drag.style.cssText = 'cursor:grab;color:#5b6472;font-weight:700;';
+
+                const label = document.createElement('span');
+                label.textContent = name;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = 'x';
+                removeBtn.style.cssText = 'border:none;background:transparent;cursor:pointer;font-size:16px;line-height:1;color:#334155;';
+                removeBtn.addEventListener('click', function() {
+                    selected = selected.filter(function(item) { return item !== name; });
+                    renderTokens();
+                });
+
+                token.appendChild(drag);
+                token.appendChild(label);
+                token.appendChild(removeBtn);
+                tokenList.appendChild(token);
+            });
+            syncHiddenInputs();
+        }
+
+        function addToken(raw) {
+            const value = (raw || '').trim();
+            if (!value || selected.includes(value)) {
+                return;
+            }
+            selected.push(value);
+            renderTokens();
+        }
+
+        tokenInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ',') {
+                event.preventDefault();
+                addToken(tokenInput.value);
+                tokenInput.value = '';
+                return;
+            }
+            if (event.key === 'Backspace' && !tokenInput.value && selected.length) {
+                selected.pop();
+                renderTokens();
+            }
+        });
+
+        tokenInput.addEventListener('blur', function() {
+            if (tokenInput.value.trim()) {
+                addToken(tokenInput.value);
+                tokenInput.value = '';
+            }
+        });
+
+        clearAllBtn.addEventListener('click', function() {
+            selected = [];
+            renderTokens();
+        });
+
+        if (window.Sortable) {
+            Sortable.create(tokenList, {
+                animation: 150,
+                handle: '.drag-handle',
+                onSort: refreshFromDom,
+            });
+        }
+
+        renderTokens();
+    });
+</script>
 {% endblock %}

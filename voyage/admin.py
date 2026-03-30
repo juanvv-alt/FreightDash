@@ -233,75 +233,65 @@ def upload_indices_view(request):
 
 
 def indices_config_view(request):
+    valid_vessels = {key for key, _ in VESSEL_SIZE_CHOICES}
+    selected_vessel = request.GET.get('vessel') or request.POST.get('vessel') or 'capesize'
+    if selected_vessel not in valid_vessels:
+        selected_vessel = 'capesize'
+
     if request.method == 'POST':
+        selected_indices_raw = request.POST.getlist('indices')
+        selected_indices = []
+        seen = set()
+        for index_name in selected_indices_raw:
+            cleaned = (index_name or '').strip()
+            if not cleaned or len(cleaned) > 120 or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            selected_indices.append(cleaned)
+
         with transaction.atomic():
-            for index_obj in AvailableIndex.objects.all():
-                remove_flag = request.POST.get(f'remove_{index_obj.id}')
-                if remove_flag == 'on':
-                    index_obj.delete()
-                    continue
+            # Any index not present in the token list is hidden for this vessel tab.
+            AvailableIndex.objects.filter(vessel_size=selected_vessel).update(is_active=False)
 
-                new_vessel = request.POST.get(f'vessel_size_{index_obj.id}', index_obj.vessel_size)
-                new_order_raw = request.POST.get(f'order_{index_obj.id}', str(index_obj.order))
-                new_active = request.POST.get(f'is_active_{index_obj.id}') == 'on'
-
-                if new_vessel not in dict(VESSEL_SIZE_CHOICES):
-                    new_vessel = index_obj.vessel_size
-
-                try:
-                    new_order = max(0, int(new_order_raw))
-                except (TypeError, ValueError):
-                    new_order = index_obj.order
-
-                changed = (
-                    index_obj.vessel_size != new_vessel
-                    or index_obj.order != new_order
-                    or index_obj.is_active != new_active
-                )
-                if changed:
-                    index_obj.vessel_size = new_vessel
-                    index_obj.order = new_order
-                    index_obj.is_active = new_active
-                    index_obj.save(update_fields=['vessel_size', 'order', 'is_active', 'updated_at'])
-
-            new_name = (request.POST.get('new_name') or '').strip()
-            new_vessel = request.POST.get('new_vessel_size')
-            new_order_raw = request.POST.get('new_order', '100')
-            new_active = request.POST.get('new_is_active') == 'on'
-            if new_name:
-                if new_vessel not in dict(VESSEL_SIZE_CHOICES):
-                    new_vessel = 'capesize'
-                try:
-                    new_order = max(0, int(new_order_raw))
-                except (TypeError, ValueError):
-                    new_order = 100
-
-                AvailableIndex.objects.get_or_create(
-                    name=new_name,
+            for order, index_name in enumerate(selected_indices, start=1):
+                index_obj, _ = AvailableIndex.objects.get_or_create(
+                    name=index_name,
                     defaults={
-                        'vessel_size': new_vessel,
-                        'order': new_order,
-                        'is_active': new_active,
+                        'vessel_size': selected_vessel,
+                        'order': order,
+                        'is_active': True,
                     },
                 )
+                changed = False
+                if index_obj.vessel_size != selected_vessel:
+                    index_obj.vessel_size = selected_vessel
+                    changed = True
+                if index_obj.order != order:
+                    index_obj.order = order
+                    changed = True
+                if not index_obj.is_active:
+                    index_obj.is_active = True
+                    changed = True
+                if changed:
+                    index_obj.save(update_fields=['vessel_size', 'order', 'is_active', 'updated_at'])
 
         messages.success(request, 'Indices display configuration updated.')
-        return redirect(reverse('admin:indices-config'))
+        return redirect(f"{reverse('admin:indices-config')}?vessel={selected_vessel}")
 
-    grouped = {
-        'capesize': [],
-        'panamax': [],
-        'supramax': [],
-        'handysize': [],
-    }
-    for index_obj in AvailableIndex.objects.order_by('vessel_size', 'order', 'name'):
-        grouped.setdefault(index_obj.vessel_size, []).append(index_obj)
+    active_indices = list(
+        AvailableIndex.objects.filter(vessel_size=selected_vessel, is_active=True)
+        .order_by('order', 'name')
+        .values_list('name', flat=True)
+    )
+    suggestions = list(AvailableIndex.objects.order_by('name').values_list('name', flat=True))
 
     context = {
         **admin.site.each_context(request),
         'title': 'Indices Display Config',
-        'grouped_indices': grouped,
+        'selected_vessel': selected_vessel,
         'vessel_choices': VESSEL_SIZE_CHOICES,
+        'active_indices': active_indices,
+        'all_index_suggestions': suggestions,
     }
     return render(request, 'admin/indices_config.html', context)
 

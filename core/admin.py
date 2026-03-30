@@ -22,127 +22,197 @@ BACKUP_APP_LABELS = ("core", "voyage")
 
 class MenuItemAdmin(admin.ModelAdmin):
     """Admin configuration for Menu Items."""
-    list_display = ('title', 'url', 'icon', 'order', 'is_active', 'created_at', 'updated_at')
-    list_editable = ('order', 'is_active')
-    list_filter = ('is_active',)
-    search_fields = ('title', 'url')
-    ordering = ('order', 'title')
-    
+
+    list_display = ("title", "url", "parent", "icon", "order", "is_active", "updated_at")
+    list_editable = ("parent", "order", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("title", "url")
+    ordering = ("order", "title")
+
     fieldsets = (
-        (None, {
-            'fields': ('title', 'url', 'icon', 'order', 'is_active')
-        }),
-        ('Help Text', {
-            'classes': ('collapse',),
-            'fields': (),
-            'description': (
-                '<p><strong>Icon examples:</strong></p>'
-                '<ul>'
-                '<li><i class="fas fa-ship"></i> fas fa-ship</li>'
-                '<li><i class="fas fa-home"></i> fas fa-home</li>'
-                '<li><i class="fas fa-calculator"></i> fas fa-calculator</li>'
-                '<li><i class="fas fa-cog"></i> fas fa-cog</li>'
-                '<li><i class="fas fa-database"></i> fas fa-database</li>'
-                '<li><i class="fas fa-chart-line"></i> fas fa-chart-line</li>'
-                '</ul>'
-                '<p><strong>URL examples:</strong></p>'
-                '<ul>'
-                '<li>/ - Home</li>'
-                '<li>/admin/ - Admin Panel</li>'
-                '<li>/admin/database-tools/ - Database Tools</li>'
-                '</ul>'
-            )
-        }),
+        (
+            None,
+            {
+                "fields": ("title", "url", "parent", "icon", "order", "is_active"),
+            },
+        ),
+        (
+            "Help Text",
+            {
+                "classes": ("collapse",),
+                "fields": (),
+                "description": (
+                    "<p><strong>Icon examples:</strong></p>"
+                    "<ul>"
+                    "<li><i class=\"fas fa-ship\"></i> fas fa-ship</li>"
+                    "<li><i class=\"fas fa-home\"></i> fas fa-home</li>"
+                    "<li><i class=\"fas fa-calculator\"></i> fas fa-calculator</li>"
+                    "<li><i class=\"fas fa-cog\"></i> fas fa-cog</li>"
+                    "<li><i class=\"fas fa-database\"></i> fas fa-database</li>"
+                    "<li><i class=\"fas fa-chart-line\"></i> fas fa-chart-line</li>"
+                    "</ul>"
+                    "<p><strong>URL examples:</strong></p>"
+                    "<ul>"
+                    "<li>/ - Home</li>"
+                    "<li>/admin/ - Admin Panel</li>"
+                    "<li>/admin/database-tools/ - Database Tools</li>"
+                    "</ul>"
+                ),
+            },
+        ),
     )
 
 
 class RestoreBackupForm(forms.Form):
-	backup_file = forms.FileField(
-		help_text="Upload a JSON backup exported from this page."
-	)
-	replace_existing = forms.BooleanField(
-		required=False,
-		initial=True,
-		help_text="Delete existing core/voyage data before restore.",
-	)
+    backup_file = forms.FileField(
+        help_text="Upload a JSON backup exported from this page."
+    )
+    replace_existing = forms.BooleanField(
+        required=False,
+        initial=True,
+        help_text="Delete existing core/voyage data before restore.",
+    )
+
+
+def menu_builder_view(request):
+    if request.method == "POST":
+        ordered_ids = [int(item_id) for item_id in request.POST.getlist("item_ids") if item_id.isdigit()]
+        valid_parent_ids = {str(item.id) for item in MenuItem.objects.all()}
+
+        with transaction.atomic():
+            for position, item_id in enumerate(ordered_ids, start=1):
+                try:
+                    item = MenuItem.objects.get(id=item_id)
+                except MenuItem.DoesNotExist:
+                    continue
+
+                title = (request.POST.get(f"title_{item_id}") or "").strip()
+                url = (request.POST.get(f"url_{item_id}") or "").strip()
+                icon = (request.POST.get(f"icon_{item_id}") or "").strip() or "fas fa-circle"
+                is_active = request.POST.get(f"is_active_{item_id}") == "on"
+                parent_raw = request.POST.get(f"parent_{item_id}")
+
+                parent_obj = None
+                if parent_raw in valid_parent_ids and parent_raw != str(item_id):
+                    parent_obj = MenuItem.objects.filter(id=int(parent_raw)).first()
+
+                if title and url:
+                    item.title = title
+                    item.url = url
+                    item.icon = icon
+                    item.is_active = is_active
+                    item.parent = parent_obj
+                    item.order = position
+                    item.save()
+
+            new_title = (request.POST.get("new_title") or "").strip()
+            new_url = (request.POST.get("new_url") or "").strip()
+            new_icon = (request.POST.get("new_icon") or "").strip() or "fas fa-circle"
+            new_parent_raw = request.POST.get("new_parent")
+            new_parent = None
+            if new_parent_raw in valid_parent_ids:
+                new_parent = MenuItem.objects.filter(id=int(new_parent_raw)).first()
+
+            if new_title and new_url:
+                MenuItem.objects.create(
+                    title=new_title,
+                    url=new_url,
+                    icon=new_icon,
+                    parent=new_parent,
+                    order=max([item.order for item in MenuItem.objects.all()] + [0]) + 1,
+                    is_active=True,
+                )
+
+        messages.success(request, "Menu Builder updated successfully.")
+        return redirect(reverse("admin:menu-builder"))
+
+    items = list(MenuItem.objects.order_by("order", "title"))
+    parent_choices = [item for item in items]
+    context = {
+        **admin.site.each_context(request),
+        "title": "Menu Builder",
+        "items": items,
+        "parent_choices": parent_choices,
+    }
+    return TemplateResponse(request, "admin/menu_builder.html", context)
 
 
 def _delete_backup_app_data():
-	models = []
-	for app_label in BACKUP_APP_LABELS:
-		app_config = apps.get_app_config(app_label)
-		models.extend(app_config.get_models())
+    models = []
+    for app_label in BACKUP_APP_LABELS:
+        app_config = apps.get_app_config(app_label)
+        models.extend(app_config.get_models())
 
-	# Delete in reverse order to respect FK dependencies.
-	for model in reversed(models):
-		model.objects.all().delete()
+    # Delete in reverse order to respect FK dependencies.
+    for model in reversed(models):
+        model.objects.all().delete()
 
 
 def database_tools_view(request):
-	if request.method == "POST":
-		action = request.POST.get("action")
+    if request.method == "POST":
+        action = request.POST.get("action")
 
-		if action == "download":
-			output = StringIO()
-			call_command(
-				"dumpdata",
-				*BACKUP_APP_LABELS,
-				format="json",
-				indent=2,
-				stdout=output,
-			)
-			backup_json = output.getvalue()
-			timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
-			response = HttpResponse(backup_json, content_type="application/json")
-			response["Content-Disposition"] = (
-				f'attachment; filename="freightdash_backup_{timestamp}.json"'
-			)
-			return response
+        if action == "download":
+            output = StringIO()
+            call_command(
+                "dumpdata",
+                *BACKUP_APP_LABELS,
+                format="json",
+                indent=2,
+                stdout=output,
+            )
+            backup_json = output.getvalue()
+            timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+            response = HttpResponse(backup_json, content_type="application/json")
+            response["Content-Disposition"] = (
+                f'attachment; filename="freightdash_backup_{timestamp}.json"'
+            )
+            return response
 
-		if action == "restore":
-			restore_form = RestoreBackupForm(request.POST, request.FILES)
-			if restore_form.is_valid():
-				uploaded_file = restore_form.cleaned_data["backup_file"]
-				replace_existing = restore_form.cleaned_data["replace_existing"]
+        if action == "restore":
+            restore_form = RestoreBackupForm(request.POST, request.FILES)
+            if restore_form.is_valid():
+                uploaded_file = restore_form.cleaned_data["backup_file"]
+                replace_existing = restore_form.cleaned_data["replace_existing"]
 
-				try:
-					file_bytes = uploaded_file.read()
-					json.loads(file_bytes.decode("utf-8"))
-				except (UnicodeDecodeError, json.JSONDecodeError):
-					messages.error(request, "Invalid backup file. Please upload valid JSON.")
-					return redirect(reverse("admin:database-tools"))
+                try:
+                    file_bytes = uploaded_file.read()
+                    json.loads(file_bytes.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    messages.error(request, "Invalid backup file. Please upload valid JSON.")
+                    return redirect(reverse("admin:database-tools"))
 
-				temp_path = None
-				try:
-					with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
-						tmp_file.write(file_bytes)
-						temp_path = tmp_file.name
+                temp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
+                        tmp_file.write(file_bytes)
+                        temp_path = tmp_file.name
 
-					with transaction.atomic():
-						if replace_existing:
-							_delete_backup_app_data()
-						call_command("loaddata", temp_path, verbosity=0)
+                    with transaction.atomic():
+                        if replace_existing:
+                            _delete_backup_app_data()
+                        call_command("loaddata", temp_path, verbosity=0)
 
-					messages.success(request, "Backup restored successfully.")
-				except Exception as exc:
-					messages.error(request, f"Restore failed: {exc}")
-				finally:
-					if temp_path and os.path.exists(temp_path):
-						os.unlink(temp_path)
+                    messages.success(request, "Backup restored successfully.")
+                except Exception as exc:
+                    messages.error(request, f"Restore failed: {exc}")
+                finally:
+                    if temp_path and os.path.exists(temp_path):
+                        os.unlink(temp_path)
 
-				return redirect(reverse("admin:database-tools"))
+                return redirect(reverse("admin:database-tools"))
 
-			messages.error(request, "Please select a backup file.")
-			return redirect(reverse("admin:database-tools"))
+            messages.error(request, "Please select a backup file.")
+            return redirect(reverse("admin:database-tools"))
 
-	restore_form = RestoreBackupForm()
-	context = {
-		**admin.site.each_context(request),
-		"title": "Database Backup & Restore",
-		"backup_app_labels": ", ".join(BACKUP_APP_LABELS),
-		"restore_form": restore_form,
-	}
-	return TemplateResponse(request, "admin/database_tools.html", context)
+    restore_form = RestoreBackupForm()
+    context = {
+        **admin.site.each_context(request),
+        "title": "Database Backup & Restore",
+        "backup_app_labels": ", ".join(BACKUP_APP_LABELS),
+        "restore_form": restore_form,
+    }
+    return TemplateResponse(request, "admin/database_tools.html", context)
 
 
 # Register the MenuItem model
@@ -153,14 +223,19 @@ _original_get_urls = admin.site.get_urls
 
 
 def _custom_admin_urls():
-	custom_urls = [
-		path(
-			"database-tools/",
-			admin.site.admin_view(database_tools_view),
-			name="database-tools",
-		),
-	]
-	return custom_urls + _original_get_urls()
+    custom_urls = [
+        path(
+            "menu-builder/",
+            admin.site.admin_view(menu_builder_view),
+            name="menu-builder",
+        ),
+        path(
+            "database-tools/",
+            admin.site.admin_view(database_tools_view),
+            name="database-tools",
+        ),
+    ]
+    return custom_urls + _original_get_urls()
 
 
 admin.site.get_urls = _custom_admin_urls

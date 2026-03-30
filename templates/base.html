@@ -349,12 +349,36 @@
         </div>
         <div class="list-group">
             {% for item in menu_items %}
-            <div class="list-group-item">
-                <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">
-                    <i class="{{ item.icon }}"></i>
-                    <span class="menu-text">{{ item.title }}</span>
-                </a>
-            </div>
+                {% if item.children %}
+                <div class="menu-group">
+                    <button
+                        type="button"
+                        class="menu-group-toggle {% if request.path|slice:':8' == '/indices/' and item.url == '/indices/' %}open{% elif request.path == item.url %}open{% endif %}"
+                        data-menu-toggle="menuGroup{{ forloop.counter }}"
+                    >
+                        <i class="{{ item.icon }}"></i>
+                        <span class="menu-text">{{ item.title }}</span>
+                        <i class="fas fa-chevron-down chevron"></i>
+                    </button>
+                    <div class="menu-group-links {% if request.path|slice:':8' == '/indices/' and item.url == '/indices/' %}open{% elif request.path == item.url %}open{% endif %}" id="menuGroup{{ forloop.counter }}">
+                        {% for child in item.children %}
+                        <div class="list-group-item">
+                            <a href="{{ child.url }}" class="{% if request.path == child.url %}active{% endif %}">
+                                <i class="{{ child.icon }}"></i>
+                                <span class="menu-text">{{ child.title }}</span>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="list-group-item">
+                    <a href="{{ item.url }}" class="{% if request.path == item.url %}active{% endif %}">
+                        <i class="{{ item.icon }}"></i>
+                        <span class="menu-text">{{ item.title }}</span>
+                    </a>
+                </div>
+                {% endif %}
             {% empty %}
             <!-- Default menu items if none configured -->
             <div class="list-group-item">
@@ -370,50 +394,6 @@
                 </a>
             </div>
             {% endfor %}
-
-            <div class="menu-group">
-                <button
-                    type="button"
-                    class="menu-group-toggle {% if '/indices/' in request.path %}open{% endif %}"
-                    id="indicesMenuToggle"
-                >
-                    <i class="fas fa-circle-dot"></i>
-                    <span class="menu-text">Indices</span>
-                    <i class="fas fa-chevron-down chevron"></i>
-                </button>
-                <div class="menu-group-links {% if '/indices/' in request.path %}open{% endif %}" id="indicesMenuLinks">
-                    <div class="list-group-item">
-                        <a href="{% url 'voyage:indices_by_vessel' vessel='capesize' %}" class="{% if request.path == '/indices/capesize/' %}active{% endif %}">
-                            <i class="far fa-circle"></i>
-                            <span class="menu-text">Capesize</span>
-                        </a>
-                    </div>
-                    <div class="list-group-item">
-                        <a href="{% url 'voyage:indices_by_vessel' vessel='panamax' %}" class="{% if request.path == '/indices/panamax/' %}active{% endif %}">
-                            <i class="far fa-circle"></i>
-                            <span class="menu-text">Panamax</span>
-                        </a>
-                    </div>
-                    <div class="list-group-item">
-                        <a href="{% url 'voyage:indices_by_vessel' vessel='supramax' %}" class="{% if request.path == '/indices/supramax/' %}active{% endif %}">
-                            <i class="far fa-circle"></i>
-                            <span class="menu-text">Supramax</span>
-                        </a>
-                    </div>
-                    <div class="list-group-item">
-                        <a href="{% url 'voyage:indices_by_vessel' vessel='handysize' %}" class="{% if request.path == '/indices/handysize/' %}active{% endif %}">
-                            <i class="far fa-circle"></i>
-                            <span class="menu-text">Handysize</span>
-                        </a>
-                    </div>
-                    <div class="list-group-item">
-                        <a href="{% url 'voyage:indices_custom' %}" class="{% if request.path == '/indices/custom/' %}active{% endif %}">
-                            <i class="far fa-circle"></i>
-                            <span class="menu-text">Custom</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -457,8 +437,6 @@
             const pageContentWrapper = document.getElementById('page-content-wrapper');
             const sidebarToggle = document.getElementById('sidebarToggle');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
-            const indicesMenuToggle = document.getElementById('indicesMenuToggle');
-            const indicesMenuLinks = document.getElementById('indicesMenuLinks');
             
             // Check if mobile
             const isMobile = window.innerWidth <= 768;
@@ -491,12 +469,17 @@
                 sidebarOverlay.classList.remove('active');
             });
 
-            if (indicesMenuToggle && indicesMenuLinks) {
-                indicesMenuToggle.addEventListener('click', function() {
-                    indicesMenuToggle.classList.toggle('open');
-                    indicesMenuLinks.classList.toggle('open');
+            document.querySelectorAll('[data-menu-toggle]').forEach(function(toggle) {
+                const targetId = toggle.getAttribute('data-menu-toggle');
+                const target = document.getElementById(targetId);
+                if (!target) {
+                    return;
+                }
+                toggle.addEventListener('click', function() {
+                    toggle.classList.toggle('open');
+                    target.classList.toggle('open');
                 });
-            }
+            });
             
             // Handle window resize
             window.addEventListener('resize', function() {

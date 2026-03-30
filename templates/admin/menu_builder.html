@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width: 1200px;">
+    <h1>Menu Builder</h1>
+    <p>Drag to reorder, rename menu labels, change URLs/icons, and set parent for submenu items.</p>
+
+    <form method="post" id="menuBuilderForm">
+        {% csrf_token %}
+
+        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px; background: #fff;">
+            <h2 style="margin-top: 0;">Current Menu</h2>
+            <table style="width: 100%; border-collapse: collapse;" id="menuBuilderTable">
+                <thead>
+                    <tr>
+                        <th style="padding: 6px; text-align:left; border-bottom: 1px solid #ccc; width: 60px;">Drag</th>
+                        <th style="padding: 6px; text-align:left; border-bottom: 1px solid #ccc;">Title</th>
+                        <th style="padding: 6px; text-align:left; border-bottom: 1px solid #ccc;">URL</th>
+                        <th style="padding: 6px; text-align:left; border-bottom: 1px solid #ccc;">Icon</th>
+                        <th style="padding: 6px; text-align:left; border-bottom: 1px solid #ccc;">Parent</th>
+                        <th style="padding: 6px; text-align:left; border-bottom: 1px solid #ccc;">Active</th>
+                    </tr>
+                </thead>
+                <tbody id="menuBuilderBody">
+                    {% for item in items %}
+                    <tr data-item-id="{{ item.id }}">
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;"><span style="cursor: grab;">≡</span></td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
+                            <input type="hidden" name="item_ids" value="{{ item.id }}">
+                            <input type="text" name="title_{{ item.id }}" value="{{ item.title }}" style="width: 100%;">
+                        </td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;"><input type="text" name="url_{{ item.id }}" value="{{ item.url }}" style="width: 100%;"></td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;"><input type="text" name="icon_{{ item.id }}" value="{{ item.icon }}" style="width: 100%;"></td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;">
+                            <select name="parent_{{ item.id }}" style="width: 100%;">
+                                <option value="">-- top level --</option>
+                                {% for parent in parent_choices %}
+                                {% if parent.id != item.id %}
+                                <option value="{{ parent.id }}" {% if item.parent_id == parent.id %}selected{% endif %}>{{ parent.title }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td style="padding: 6px; border-bottom: 1px solid #eee;"><input type="checkbox" name="is_active_{{ item.id }}" {% if item.is_active %}checked{% endif %}></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 16px; background: #fff;">
+            <h2 style="margin-top: 0;">Add Menu Item</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px;">
+                <input type="text" name="new_title" placeholder="Title">
+                <input type="text" name="new_url" placeholder="/path/">
+                <input type="text" name="new_icon" placeholder="fas fa-circle">
+                <select name="new_parent">
+                    <option value="">-- top level --</option>
+                    {% for parent in parent_choices %}
+                    <option value="{{ parent.id }}">{{ parent.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" class="default">Save Menu Builder</button>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const body = document.getElementById('menuBuilderBody');
+        if (window.Sortable && body) {
+            Sortable.create(body, {
+                animation: 150,
+                handle: 'span',
+            });
+        }
+    });
+</script>
+{% endblock %}

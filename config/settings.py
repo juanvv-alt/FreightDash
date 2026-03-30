@@ -226,6 +226,13 @@ JAZZMIN_SETTINGS = {
     "language_chooser": False,
     "search_model": "auth.User",
     "custom_links": {
+        "core": [
+            {
+                "name": "Menu Builder",
+                "url": "admin:menu-builder",
+                "icon": "fas fa-bars",
+            }
+        ],
         "voyage": [
             {
                 "name": "Upload Baltic Indices",
