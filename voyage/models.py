@@ -6,6 +6,7 @@ VESSEL_SIZE_CHOICES = [
     ('panamax', 'Panamax'),
     ('supramax', 'Supramax'),
     ('handysize', 'Handysize'),
+    ('bunker', 'Bunker'),
 ]
 
 

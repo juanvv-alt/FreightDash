@@ -20,6 +20,7 @@ class IndexUploadForm(forms.Form):
             ('panamax', 'Panamax'),
             ('supramax', 'Supramax'),
             ('handysize', 'Handysize'),
+            ('bunker', 'Bunker'),
         ],
         help_text='Assign new index headers to this vessel size if they are not already configured.',
     )
@@ -31,6 +32,7 @@ VESSEL_SIZE_CHOICES = [
     ('panamax', 'Panamax'),
     ('supramax', 'Supramax'),
     ('handysize', 'Handysize'),
+    ('bunker', 'Bunker'),
 ]
 
 

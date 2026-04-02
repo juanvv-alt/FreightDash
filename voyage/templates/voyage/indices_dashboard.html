@@ -138,7 +138,7 @@
 <form method="get" class="indices-controls">
     <div class="row g-3">
         <div class="col-lg-8">
-            <label class="form-label fw-semibold">Indices</label>
+            <label class="form-label fw-semibold">{{ section_label }}</label>
             <div class="indices-selector">
                 <div id="indicesTokenList" class="indices-token-list"></div>
                 <input
@@ -174,7 +174,10 @@
             <div id="rangeFallback" class="range-fallback"></div>
             <input type="hidden" id="startDateInput" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
             <input type="hidden" id="endDateInput" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
-            <button type="submit" class="btn btn-primary w-100">Apply</button>
+            <div class="d-flex gap-2 mt-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">Apply</button>
+                <button type="submit" name="download" value="1" class="btn btn-success">Download</button>
+            </div>
         </div>
     </div>
 </form>

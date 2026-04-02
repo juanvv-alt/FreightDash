@@ -1,5 +1,7 @@
+import csv
 from datetime import timedelta
 
+from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.db import DatabaseError, ProgrammingError
 from django.db.utils import OperationalError
@@ -41,6 +43,15 @@ VESSEL_INDEX_GROUPS = {
     'handysize': {
         'label': 'Handysize',
         'indices': ['HS1', 'HS2', 'HS3', 'HS4', 'HS5', 'BHSI 38TC', 'BHSI Index'],
+    },
+    'bunker': {
+        'label': 'Bunker',
+        'indices': [
+            'Singapore IFO 380', 'Singapore MGO', 'Singapore VLSFO',
+            'Hong Kong IFO 380', 'Hong Kong MGO', 'Hong Kong VLSFO',
+            'Rotterdam IFO 380', 'Rotterdam MGO', 'Rotterdam VLSFO',
+            'Brent', 'WTI',
+        ],
     },
 }
 
@@ -159,12 +170,31 @@ def indices_dashboard(request, vessel):
 
     rows, has_data = _build_rows(start_date, end_date, selected_indices)
 
+    # CSV download
+    if request.GET.get('download') == '1' and selected_indices:
+        response = HttpResponse(content_type='text/csv')
+        safe_vessel = vessel_key.replace('/', '_')
+        response['Content-Disposition'] = (
+            f'attachment; filename="{safe_vessel}_indices_{start_date}_{end_date}.csv"'
+        )
+        writer = csv.writer(response)
+        writer.writerow(['Date'] + selected_indices)
+        for row in rows:
+            writer.writerow(
+                [row['date'].strftime('%Y-%m-%d')]
+                + [row['values'].get(idx) if row['values'].get(idx) is not None else '' for idx in selected_indices]
+            )
+        return response
+
+    section_label = 'Bunkers' if vessel_key == 'bunker' else 'Indices'
+
     context = {
         'vessel_key': vessel_key,
         'vessel_label': vessel_config['label'],
         'vessel_menu': [
             {'key': key, 'label': config['label']}
             for key, config in VESSEL_INDEX_GROUPS.items()
+            if key != 'bunker'
         ],
         'all_indices': all_indices,
         'selected_indices': selected_indices,
@@ -172,6 +202,7 @@ def indices_dashboard(request, vessel):
         'end_date': end_date,
         'rows': rows,
         'has_data': has_data,
+        'section_label': section_label,
     }
     return render(request, 'voyage/indices_dashboard.html', context)
 
