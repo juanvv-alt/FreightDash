@@ -8,7 +8,13 @@ from django.db.utils import OperationalError
 from django.utils import timezone
 import logging
 from .models import RouteParameters
-from .models import AvailableIndex, CustomIndexPreset, DailyIndexValue
+from .models import (
+    AvailableIndex,
+    CustomIndexPreset,
+    DailyIndexValue,
+    FreightVoyage,
+    VesselFuelConsumption,
+)
 from .forms import TCECalculatorForm
 from .calculators import (
     calculate_fuel_and_days,
@@ -299,6 +305,184 @@ def indices_custom(request):
         'selected_preset_name': selected_preset.name if selected_preset else '',
     }
     return render(request, 'voyage/indices_custom.html', context)
+
+
+def _resolve_intake(voyage):
+    if voyage.intake_mode == 'manual':
+        return max(voyage.intake_manual, 0)
+
+    vessel = voyage.vessel
+    if not vessel:
+        return 0
+
+    draft_limit = voyage.draft_limit or vessel.draft
+    draft_ratio = min(draft_limit / vessel.draft, 1) if vessel.draft else 1
+    draft_adjusted_dwt = vessel.dwt * draft_ratio
+
+    if voyage.stowage_factor and vessel.grain_capacity:
+        capacity_limited = vessel.grain_capacity / voyage.stowage_factor
+        return max(min(draft_adjusted_dwt, capacity_limited), 0)
+
+    return max(draft_adjusted_dwt, 0)
+
+
+def _select_speed_profile(voyage):
+    if voyage.speed_profile:
+        return voyage.speed_profile
+
+    default_profile = voyage.vessel.speed_profiles.filter(is_default=True).first()
+    if default_profile:
+        return default_profile
+
+    return voyage.vessel.speed_profiles.order_by('name').first()
+
+
+def _total_consumption_by_mode(voyage):
+    fuel_profile = voyage.fuel_profile or voyage.vessel.fuel_profiles.filter(is_default=True).first()
+    if not fuel_profile:
+        fuel_profile = voyage.vessel.fuel_profiles.order_by('name').first()
+
+    lines = list(VesselFuelConsumption.objects.filter(fuel_profile=fuel_profile)) if fuel_profile else []
+    sea_total = sum(line.sea_consumption for line in lines)
+    port_total = sum(line.port_consumption for line in lines)
+    return sea_total, port_total
+
+
+def _blended_fuel_price(voyage, date_value):
+    splits = list(voyage.fuel_splits.select_related('fuel_index').all())
+    if not splits:
+        return None
+
+    lookup = {
+        value.index_id: value.value
+        for value in DailyIndexValue.objects.filter(
+            index_id__in=[line.fuel_index_id for line in splits],
+            date=date_value,
+        )
+    }
+
+    total_weight = 0.0
+    total_price = 0.0
+    for line in splits:
+        index_price = lookup.get(line.fuel_index_id)
+        if index_price is None or line.weight_pct <= 0:
+            continue
+        total_weight += line.weight_pct
+        total_price += index_price * line.weight_pct
+
+    if total_weight <= 0:
+        return None
+
+    return total_price / total_weight
+
+
+def freight_matrix(request):
+    today = timezone.localdate()
+    default_start = today - timedelta(days=30)
+
+    start_date_raw = request.GET.get('start_date', default_start.isoformat())
+    end_date_raw = request.GET.get('end_date', today.isoformat())
+
+    try:
+        start_date = timezone.datetime.strptime(start_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        start_date = default_start
+
+    try:
+        end_date = timezone.datetime.strptime(end_date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        end_date = today
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    date_rows = [
+        end_date - timedelta(days=offset)
+        for offset in range((end_date - start_date).days + 1)
+        if (end_date - timedelta(days=offset)).weekday() < 5
+    ]
+
+    voyages = list(
+        FreightVoyage.objects.filter(is_active=True)
+        .select_related('vessel', 'speed_profile', 'fuel_profile', 'daily_hire_index')
+        .prefetch_related('fuel_splits__fuel_index', 'vessel__speed_profiles', 'vessel__fuel_profiles')
+        .order_by('name')
+    )
+
+    hire_index_ids = [v.daily_hire_index_id for v in voyages if v.daily_hire_index_id]
+    hire_values = DailyIndexValue.objects.filter(index_id__in=hire_index_ids, date__gte=start_date, date__lte=end_date)
+    hire_map = {(v.index_id, v.date): v.value for v in hire_values}
+
+    matrix_rows = []
+    for row_date in date_rows:
+        rates = {}
+        for voyage in voyages:
+            if not voyage.daily_hire_index_id:
+                rates[voyage.name] = None
+                continue
+
+            target_tce = hire_map.get((voyage.daily_hire_index_id, row_date))
+            blended_fuel_price = _blended_fuel_price(voyage, row_date)
+            speed = _select_speed_profile(voyage)
+
+            if (
+                target_tce is None
+                or blended_fuel_price is None
+                or not speed
+                or speed.ballast_speed <= 0
+                or speed.laden_speed <= 0
+            ):
+                rates[voyage.name] = None
+                continue
+
+            intake = _resolve_intake(voyage)
+            if intake <= 0 or voyage.load_rate <= 0 or voyage.discharge_rate <= 0:
+                rates[voyage.name] = None
+                continue
+
+            sea_consumption, port_consumption = _total_consumption_by_mode(voyage)
+            if sea_consumption <= 0:
+                rates[voyage.name] = None
+                continue
+
+            ballast_margin = voyage.sea_margin_ballast_pct / 100.0
+            laden_margin = (
+                voyage.sea_margin_ballast_pct / 100.0
+                if voyage.apply_same_sea_margin
+                else voyage.sea_margin_laden_pct / 100.0
+            )
+
+            ballast_days = ((voyage.ballast_distance / speed.ballast_speed) / 24.0) * (1 + ballast_margin)
+            laden_days = ((voyage.laden_distance / speed.laden_speed) / 24.0) * (1 + laden_margin)
+            load_days = (intake / voyage.load_rate) + (voyage.turntime_load_hours / 24.0)
+            discharge_days = (intake / voyage.discharge_rate) + (voyage.turntime_discharge_hours / 24.0)
+            voyage_days = ballast_days + laden_days + load_days + discharge_days
+
+            if voyage_days <= 0:
+                rates[voyage.name] = None
+                continue
+
+            fuel_mt = ((ballast_days + laden_days) * sea_consumption) + ((load_days + discharge_days) * port_consumption)
+            total_port_expenses = voyage.port_exp_load_port + voyage.port_exp_discharge_port + voyage.misc_expenses
+            commission = (voyage.address_commission_pct + voyage.brokerage_commission_pct) / 100.0
+
+            denominator = intake * (1 - commission)
+            if denominator <= 0:
+                rates[voyage.name] = None
+                continue
+
+            freight_rate = ((target_tce * voyage_days) + total_port_expenses + (fuel_mt * blended_fuel_price)) / denominator
+            rates[voyage.name] = round(freight_rate, 2)
+
+        matrix_rows.append({'date': row_date, 'rates': rates})
+
+    context = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'voyages': voyages,
+        'matrix_rows': matrix_rows,
+    }
+    return render(request, 'voyage/freight_matrix.html', context)
 
 
 def tce_calculator(request):

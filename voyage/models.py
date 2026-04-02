@@ -108,3 +108,176 @@ class DailyIndexValue(models.Model):
 
     def __str__(self):
         return f"{self.index.name} {self.date}: {self.value}"
+
+
+class VesselProfile(models.Model):
+    """Vessel static technical particulars for matrix calculations."""
+
+    name = models.CharField(max_length=120, unique=True)
+    vessel_size = models.CharField(max_length=20, choices=VESSEL_SIZE_CHOICES, default='panamax')
+    dwt = models.FloatField(help_text='Deadweight in metric tons')
+    draft = models.FloatField(help_text='Design draft in meters')
+    npc = models.FloatField(default=0, help_text='Non-performance claims or daily fixed cost, optional')
+    grain_capacity = models.FloatField(help_text='Grain capacity in cubic meters')
+    default_port_consumption = models.FloatField(default=3.0, help_text='MT/day in port if profile does not override')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Vessel Profile'
+        verbose_name_plural = 'Vessel Parameters'
+
+    def __str__(self):
+        return self.name
+
+
+class VesselSpeedProfile(models.Model):
+    """Speed profile variants, e.g. CP, ECO, SUPER ECO."""
+
+    vessel = models.ForeignKey(VesselProfile, on_delete=models.CASCADE, related_name='speed_profiles')
+    name = models.CharField(max_length=60, help_text='e.g. CP, ECO, SUPER ECO')
+    ballast_speed = models.FloatField(help_text='Knots')
+    laden_speed = models.FloatField(help_text='Knots')
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['vessel__name', 'name']
+        unique_together = [('vessel', 'name')]
+        verbose_name = 'Vessel Speed Profile'
+        verbose_name_plural = 'Vessel Speed Profiles'
+
+    def __str__(self):
+        return f"{self.vessel.name} - {self.name}"
+
+
+class VesselFuelProfile(models.Model):
+    """Consumption profile variants with one or more fuel lines."""
+
+    vessel = models.ForeignKey(VesselProfile, on_delete=models.CASCADE, related_name='fuel_profiles')
+    name = models.CharField(max_length=60, help_text='e.g. CP CONS, ECO CONS')
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['vessel__name', 'name']
+        unique_together = [('vessel', 'name')]
+        verbose_name = 'Vessel Fuel Profile'
+        verbose_name_plural = 'Vessel Fuel Profiles'
+
+    def __str__(self):
+        return f"{self.vessel.name} - {self.name}"
+
+
+class VesselFuelConsumption(models.Model):
+    """Per-fuel daily consumption values for sea and port."""
+
+    fuel_profile = models.ForeignKey(VesselFuelProfile, on_delete=models.CASCADE, related_name='fuel_lines')
+    fuel_type = models.CharField(max_length=60, help_text='e.g. VLSFO, LSFO, MGO')
+    sea_consumption = models.FloatField(default=0, help_text='MT/day at sea')
+    port_consumption = models.FloatField(default=0, help_text='MT/day in port')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['fuel_profile__vessel__name', 'fuel_profile__name', 'fuel_type']
+        unique_together = [('fuel_profile', 'fuel_type')]
+        verbose_name = 'Vessel Fuel Consumption Line'
+        verbose_name_plural = 'Vessel Fuel Consumption Lines'
+
+    def __str__(self):
+        return f"{self.fuel_profile} - {self.fuel_type}"
+
+
+class FreightVoyage(models.Model):
+    """Voyage assumptions used to build freight-rate matrix columns."""
+
+    INTAKE_MODE_CHOICES = [
+        ('manual', 'Manual'),
+        ('calculated', 'Calculated from vessel, draft and stowage'),
+    ]
+
+    name = models.CharField(max_length=160, unique=True)
+    commodity = models.CharField(max_length=80, blank=True)
+    load_ports = models.JSONField(default=list, help_text='One or many load port names')
+    discharge_ports = models.JSONField(default=list, help_text='One or many discharge port names')
+    ballast_port = models.CharField(max_length=120)
+    load_rate = models.FloatField(help_text='MT/day')
+    discharge_rate = models.FloatField(help_text='MT/day')
+    turntime_load_hours = models.FloatField(default=12)
+    turntime_discharge_hours = models.FloatField(default=12)
+    port_exp_load_port = models.FloatField(default=0)
+    port_exp_discharge_port = models.FloatField(default=0)
+    misc_expenses = models.FloatField(default=0)
+
+    vessel = models.ForeignKey(VesselProfile, on_delete=models.PROTECT, related_name='voyages')
+    speed_profile = models.ForeignKey(
+        VesselSpeedProfile,
+        on_delete=models.PROTECT,
+        related_name='voyages',
+        null=True,
+        blank=True,
+    )
+    fuel_profile = models.ForeignKey(
+        VesselFuelProfile,
+        on_delete=models.PROTECT,
+        related_name='voyages',
+        null=True,
+        blank=True,
+    )
+
+    intake_mode = models.CharField(max_length=20, choices=INTAKE_MODE_CHOICES, default='manual')
+    intake_manual = models.FloatField(default=0, help_text='MT if manual mode')
+    draft_limit = models.FloatField(default=0, help_text='Optional limiting draft in meters')
+    stowage_factor = models.FloatField(default=0, help_text='cbm/mt used for intake calc mode')
+
+    apply_same_sea_margin = models.BooleanField(default=True)
+    sea_margin_ballast_pct = models.FloatField(default=7)
+    sea_margin_laden_pct = models.FloatField(default=7)
+    ballast_distance = models.FloatField(help_text='NM total ballast leg')
+    laden_distance = models.FloatField(help_text='NM total laden leg')
+
+    address_commission_pct = models.FloatField(default=0)
+    brokerage_commission_pct = models.FloatField(default=0)
+    daily_hire_index = models.ForeignKey(
+        AvailableIndex,
+        on_delete=models.PROTECT,
+        related_name='hire_voyages',
+        null=True,
+        blank=True,
+        help_text='Index whose daily value is target TCE for this voyage',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Freight Voyage'
+        verbose_name_plural = 'Voyage Parameters'
+
+    def __str__(self):
+        return self.name
+
+
+class VoyageFuelSplit(models.Model):
+    """Fuel index basket used to price total voyage fuel cost."""
+
+    voyage = models.ForeignKey(FreightVoyage, on_delete=models.CASCADE, related_name='fuel_splits')
+    fuel_index = models.ForeignKey(AvailableIndex, on_delete=models.PROTECT, related_name='fuel_split_lines')
+    weight_pct = models.FloatField(default=100, help_text='Weight in percentage points')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['voyage__name', 'fuel_index__name']
+        unique_together = [('voyage', 'fuel_index')]
+        verbose_name = 'Voyage Fuel Split'
+        verbose_name_plural = 'Voyage Fuel Splits'
+
+    def __str__(self):
+        return f"{self.voyage.name} - {self.fuel_index.name} ({self.weight_pct}%)"

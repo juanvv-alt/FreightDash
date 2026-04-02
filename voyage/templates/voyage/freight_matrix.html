@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% load voyage_extras %}
+
+{% block title %}Freight Matrix - FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+    .matrix-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .matrix-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #222;
+    }
+
+    .matrix-controls,
+    .matrix-card {
+        background: #fff;
+        border: 1px solid #e2e5e9;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+
+    .matrix-table-wrap {
+        overflow-x: auto;
+        border: 1px solid #e2e5e9;
+        border-radius: 6px;
+    }
+
+    .matrix-table-wrap table {
+        min-width: 900px;
+        margin-bottom: 0;
+    }
+
+    .note {
+        color: #6c757d;
+        font-size: 13px;
+        margin: 10px 0 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="matrix-header">
+    <div>
+        <h1>Freight Matrix</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0 mt-1">
+                <li class="breadcrumb-item"><a href="/">Home</a></li>
+                <li class="breadcrumb-item"><a href="/">Freight Calculator</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Voyage</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<form method="get" class="matrix-controls">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">Start Date</label>
+            <input type="date" class="form-control" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">End Date</label>
+            <input type="date" class="form-control" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-primary w-100">Apply</button>
+        </div>
+    </div>
+</form>
+
+<div class="matrix-card">
+    <div class="matrix-table-wrap">
+        <table class="table table-sm table-striped table-bordered mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Date</th>
+                    {% for voyage in voyages %}
+                    <th>{{ voyage.name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% if not voyages %}
+                <tr>
+                    <td colspan="2">No active voyages configured in admin.</td>
+                </tr>
+                {% else %}
+                {% for row in matrix_rows %}
+                <tr>
+                    <td>{{ row.date|date:'Y-m-d' }}</td>
+                    {% for voyage in voyages %}
+                    <td>
+                        {% with voyage_rate=row.rates|get_item:voyage.name %}
+                        {% if voyage_rate or voyage_rate == 0 %}
+                            {{ voyage_rate }}
+                        {% else %}
+                            -
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    <p class="note">Read-only dashboard: edit voyages, vessels, speed and fuel profiles in Django admin.</p>
+</div>
+{% endblock %}

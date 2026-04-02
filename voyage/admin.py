@@ -10,7 +10,18 @@ from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from openpyxl import load_workbook
 
-from .models import AvailableIndex, CustomIndexPreset, DailyIndexValue, RouteParameters
+from .models import (
+    AvailableIndex,
+    CustomIndexPreset,
+    DailyIndexValue,
+    FreightVoyage,
+    RouteParameters,
+    VesselFuelConsumption,
+    VesselFuelProfile,
+    VesselProfile,
+    VesselSpeedProfile,
+    VoyageFuelSplit,
+)
 
 
 class IndexUploadForm(forms.Form):
@@ -102,6 +113,100 @@ class DailyIndexValueAdmin(admin.ModelAdmin):
     list_filter = ('index__vessel_size', 'index', 'date')
     search_fields = ('index__name',)
     ordering = ('-date', 'index__name')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+class VesselSpeedProfileInline(admin.TabularInline):
+    model = VesselSpeedProfile
+    extra = 1
+    fields = ('name', 'ballast_speed', 'laden_speed', 'is_default')
+
+
+class VesselFuelConsumptionInline(admin.TabularInline):
+    model = VesselFuelConsumption
+    extra = 1
+    fields = ('fuel_type', 'sea_consumption', 'port_consumption')
+
+
+class VesselFuelProfileInline(admin.StackedInline):
+    model = VesselFuelProfile
+    extra = 1
+    fields = ('name', 'is_default')
+
+
+@admin.register(VesselProfile)
+class VesselProfileAdmin(admin.ModelAdmin):
+    list_display = ('name', 'vessel_size', 'dwt', 'draft', 'grain_capacity', 'is_active')
+    list_filter = ('vessel_size', 'is_active')
+    search_fields = ('name',)
+    inlines = (VesselSpeedProfileInline, VesselFuelProfileInline)
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(VesselFuelProfile)
+class VesselFuelProfileAdmin(admin.ModelAdmin):
+    list_display = ('name', 'vessel', 'is_default', 'updated_at')
+    list_filter = ('is_default', 'vessel__vessel_size')
+    search_fields = ('name', 'vessel__name')
+    inlines = (VesselFuelConsumptionInline,)
+    readonly_fields = ('created_at', 'updated_at')
+
+
+class VoyageFuelSplitInline(admin.TabularInline):
+    model = VoyageFuelSplit
+    extra = 1
+    fields = ('fuel_index', 'weight_pct')
+
+
+@admin.register(FreightVoyage)
+class FreightVoyageAdmin(admin.ModelAdmin):
+    list_display = ('name', 'vessel', 'load_rate', 'discharge_rate', 'ballast_distance', 'laden_distance', 'is_active')
+    list_filter = ('is_active', 'vessel__vessel_size', 'intake_mode')
+    search_fields = ('name', 'commodity', 'ballast_port')
+    inlines = (VoyageFuelSplitInline,)
+    fieldsets = (
+        ('Voyage Identification', {
+            'fields': ('name', 'commodity', 'is_active'),
+        }),
+        ('Ports', {
+            'fields': ('load_ports', 'discharge_ports', 'ballast_port'),
+        }),
+        ('Port Operations', {
+            'fields': (
+                'load_rate',
+                'discharge_rate',
+                'turntime_load_hours',
+                'turntime_discharge_hours',
+            ),
+        }),
+        ('Costs and Distances', {
+            'fields': (
+                'port_exp_load_port',
+                'port_exp_discharge_port',
+                'misc_expenses',
+                'ballast_distance',
+                'laden_distance',
+            ),
+        }),
+        ('Vessel and Profiles', {
+            'fields': ('vessel', 'speed_profile', 'fuel_profile'),
+        }),
+        ('Intake', {
+            'fields': ('intake_mode', 'intake_manual', 'draft_limit', 'stowage_factor'),
+        }),
+        ('Margins and Commissions', {
+            'fields': (
+                'apply_same_sea_margin',
+                'sea_margin_ballast_pct',
+                'sea_margin_laden_pct',
+                'address_commission_pct',
+                'brokerage_commission_pct',
+            ),
+        }),
+        ('Daily Hire Link', {
+            'fields': ('daily_hire_index',),
+        }),
+    )
     readonly_fields = ('created_at', 'updated_at')
 
 
