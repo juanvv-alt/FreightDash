@@ -4,7 +4,7 @@ from io import BytesIO
 from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils.html import format_html
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
@@ -235,7 +235,7 @@ def upload_indices_view(request):
             upload_file = form.cleaned_data['upload_file']
 
             try:
-                workbook = load_workbook(filename=BytesIO(upload_file.read()), data_only=True)
+                workbook = load_workbook(filename=BytesIO(upload_file.read()), data_only=True, read_only=True)
                 sheet = workbook.active
             except Exception:
                 messages.error(request, 'Unable to read Excel file. Please upload a valid .xlsx file.')
@@ -276,51 +276,108 @@ def upload_indices_view(request):
                 return redirect(reverse('admin:indices-upload'))
 
             with transaction.atomic():
-                name_to_index = {
-                    index.name: index
-                    for index in AvailableIndex.objects.filter(name__in=[name for _, name in data_columns])
-                }
+                    normalized_headers = {
+                        header.strip().lower(): header.strip()
+                        for _, header in data_columns
+                        if header and header.strip()
+                    }
+                    existing_query = Q()
+                    for header in normalized_headers.values():
+                        existing_query |= Q(name__iexact=header)
+                    existing_indices = AvailableIndex.objects.filter(existing_query) if existing_query else AvailableIndex.objects.none()
+                    name_to_index = {
+                        index.name.strip().lower(): index
+                        for index in existing_indices
+                    }
 
-                filtered_data_columns = []
-                ignored_columns = []
-                for col_idx, index_name in data_columns:
-                    if index_name in name_to_index:
-                        filtered_data_columns.append((col_idx, index_name))
-                    else:
-                        ignored_columns.append(index_name)
+                    missing_headers = [
+                        normalized_headers[normalized]
+                        for normalized in normalized_headers
+                        if normalized not in name_to_index
+                    ]
 
-                if not filtered_data_columns:
-                    messages.error(request, 'None of the uploaded index columns exist in Available Indices. Upload aborted.')
-                    return redirect(reverse('admin:indices-upload'))
+                    if missing_headers:
+                        next_order = AvailableIndex.objects.filter(vessel_size=vessel_size).aggregate(
+                            max_order=Max('order')
+                        )['max_order'] or 0
+                        new_indices = []
+                        for header in missing_headers:
+                            next_order += 1
+                            new_indices.append(
+                                AvailableIndex(
+                                    name=header,
+                                    vessel_size=vessel_size,
+                                    order=next_order,
+                                    is_active=True,
+                                )
+                            )
+                        AvailableIndex.objects.bulk_create(new_indices)
+                        for index in new_indices:
+                            name_to_index[index.name.strip().lower()] = index
 
-                insert_count = 0
-                skipped_existing_count = 0
-                for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-                    if not row:
-                        continue
-                    row_date = _parse_excel_date(row[date_col_idx] if len(row) > date_col_idx else None)
-                    if not row_date:
-                        continue
-
-                    for col_idx, index_name in filtered_data_columns:
-                        raw_value = row[col_idx] if len(row) > col_idx else None
-                        if raw_value in (None, ''):
-                            continue
-                        try:
-                            numeric_value = float(raw_value)
-                        except (TypeError, ValueError):
-                            continue
-
-                        _, created = DailyIndexValue.objects.get_or_create(
-                            index=name_to_index[index_name],
-                            date=row_date,
-                            defaults={'value': numeric_value},
-                        )
-                        if created:
-                            insert_count += 1
+                    filtered_data_columns = []
+                    ignored_columns = []
+                    for col_idx, index_name in data_columns:
+                        normalized_name = index_name.strip().lower()
+                        index_obj = name_to_index.get(normalized_name)
+                        if index_obj:
+                            filtered_data_columns.append((col_idx, index_obj))
                         else:
-                            skipped_existing_count += 1
+                            ignored_columns.append(index_name.strip())
 
+                    if not filtered_data_columns:
+                        messages.error(request, 'None of the uploaded index columns exist in Available Indices. Upload aborted.')
+                        return redirect(reverse('admin:indices-upload'))
+
+                    row_dates = set()
+                    candidate_values = []
+                    candidate_keys = set()
+                    for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
+                        if not row:
+                            continue
+                        row_date = _parse_excel_date(row[date_col_idx] if len(row) > date_col_idx else None)
+                        if not row_date:
+                            continue
+
+                        row_dates.add(row_date)
+                        for col_idx, index_obj in filtered_data_columns:
+                            raw_value = row[col_idx] if len(row) > col_idx else None
+                            if raw_value in (None, ''):
+                                continue
+                            try:
+                                numeric_value = float(raw_value)
+                            except (TypeError, ValueError):
+                                continue
+
+                            key = (index_obj.pk, row_date)
+                            if key in candidate_keys:
+                                continue
+                            candidate_keys.add(key)
+                            candidate_values.append(
+                                DailyIndexValue(
+                                    index=index_obj,
+                                    date=row_date,
+                                    value=numeric_value,
+                                )
+                            )
+
+                    existing_keys = set(
+                        DailyIndexValue.objects.filter(
+                            index__in=[idx for _, idx in filtered_data_columns],
+                            date__in=row_dates,
+                        ).values_list('index_id', 'date')
+                    ) if row_dates else set()
+
+                    values_to_create = []
+                    for daily_value in candidate_values:
+                        key = (daily_value.index_id, daily_value.date)
+                        if key not in existing_keys:
+                            values_to_create.append(daily_value)
+                            existing_keys.add(key)
+
+                    DailyIndexValue.objects.bulk_create(values_to_create, ignore_conflicts=True)
+                    insert_count = len(values_to_create)
+                    skipped_existing_count = len(candidate_values) - insert_count
             messages.success(
                 request,
                 f'Upload completed. Inserted {insert_count} new daily values. '
