@@ -1,12 +1,11 @@
 from datetime import datetime
-from io import BytesIO
 import os
 import sys
 
+import pandas as pd
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Max, Q
-from openpyxl import load_workbook
 
 from voyage.models import AvailableIndex, DailyIndexValue
 
@@ -27,63 +26,55 @@ class Command(BaseCommand):
             choices=['capesize', 'panamax', 'supramax', 'handysize', 'bunker'],
             help='Vessel size for new indices (default: panamax)',
         )
+        parser.add_argument(
+            '--sheet-name',
+            type=str,
+            default=0,
+            help='Sheet name or index to read (default: first sheet)',
+        )
 
     def handle(self, *args, **options):
         file_path = options['file_path']
         vessel_size = options['vessel_size']
+        sheet_name = options['sheet_name']
 
         if not os.path.exists(file_path):
             raise CommandError(f'File does not exist: {file_path}')
 
         try:
-            workbook = load_workbook(filename=file_path, data_only=True, read_only=True)
-            sheet = workbook.active
+            # Read Excel file with pandas
+            df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
         except Exception as e:
             raise CommandError(f'Unable to read Excel file: {e}')
 
-        # Find header row
-        header_row_idx = None
-        headers = []
-        for row_idx, row in enumerate(sheet.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
-            cleaned_row = [str(cell).strip() if cell is not None else '' for cell in row]
-            if any(cell.lower() == 'date' for cell in cleaned_row):
-                header_row_idx = row_idx
-                headers = cleaned_row
+        # Clean column names
+        df.columns = df.columns.str.strip()
+
+        # Find date column (case-insensitive)
+        date_col = None
+        for col in df.columns:
+            if col.lower() == 'date':
+                date_col = col
                 break
 
-        if not header_row_idx:
-            raise CommandError('Header row with a Date column was not found.')
+        if date_col is None:
+            raise CommandError('Date column not found in the Excel file.')
 
-        # Find date column
-        date_col_idx = None
-        for idx, name in enumerate(headers):
-            if name.lower() == 'date':
-                date_col_idx = idx
-                break
+        # Convert date column
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.date
+        df = df.dropna(subset=[date_col])
 
-        if date_col_idx is None:
-            raise CommandError('Date column is missing in the uploaded file.')
-
-        # Get data columns
-        data_columns = []
-        for idx, header in enumerate(headers):
-            normalized = header.strip()
-            if idx == date_col_idx or not normalized:
-                continue
-            data_columns.append((idx, normalized))
+        # Get data columns (exclude date)
+        data_columns = [col for col in df.columns if col != date_col and not df[col].isna().all()]
 
         if not data_columns:
-            raise CommandError('No index columns found in the uploaded file.')
+            raise CommandError('No index columns found in the Excel file.')
 
         with transaction.atomic():
             # Normalize headers and find/create indices
-            normalized_headers = {
-                header.strip().lower(): header.strip()
-                for _, header in data_columns
-                if header and header.strip()
-            }
+            normalized_headers = {col.lower(): col for col in data_columns}
             existing_query = Q()
-            for header in normalized_headers.values():
+            for header in data_columns:
                 existing_query |= Q(name__iexact=header)
             existing_indices = AvailableIndex.objects.filter(existing_query) if existing_query else AvailableIndex.objects.none()
             name_to_index = {
@@ -120,60 +111,46 @@ class Command(BaseCommand):
                     self.style.SUCCESS(f'Created {len(new_indices)} new indices: {", ".join(missing_headers)}')
                 )
 
-            # Filter data columns
-            filtered_data_columns = []
-            ignored_columns = []
-            for col_idx, index_name in data_columns:
-                normalized_name = index_name.strip().lower()
-                index_obj = name_to_index.get(normalized_name)
-                if index_obj:
-                    filtered_data_columns.append((col_idx, index_obj))
-                else:
-                    ignored_columns.append(index_name.strip())
-
-            if not filtered_data_columns:
-                raise CommandError('None of the uploaded index columns exist in Available Indices.')
-
-            # Collect all data
-            row_dates = set()
+            # Process data
             candidate_values = []
             candidate_keys = set()
-            for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-                if not row:
-                    continue
-                row_date = self._parse_excel_date(row[date_col_idx] if len(row) > date_col_idx else None)
-                if not row_date:
+            ignored_columns = []
+
+            for col in data_columns:
+                normalized_name = col.lower()
+                index_obj = name_to_index.get(normalized_name)
+                if not index_obj:
+                    ignored_columns.append(col)
                     continue
 
-                row_dates.add(row_date)
-                for col_idx, index_obj in filtered_data_columns:
-                    raw_value = row[col_idx] if len(row) > col_idx else None
-                    if raw_value in (None, ''):
-                        continue
-                    try:
-                        numeric_value = float(raw_value)
-                    except (TypeError, ValueError):
-                        continue
+                # Filter valid numeric values
+                col_data = df[[date_col, col]].dropna()
+                col_data = col_data[pd.to_numeric(col_data[col], errors='coerce').notna()]
 
-                    key = (index_obj.pk, row_date)
+                for _, row in col_data.iterrows():
+                    date_val = row[date_col]
+                    value = float(row[col])
+                    key = (index_obj.pk, date_val)
                     if key in candidate_keys:
                         continue
                     candidate_keys.add(key)
                     candidate_values.append(
                         DailyIndexValue(
                             index=index_obj,
-                            date=row_date,
-                            value=numeric_value,
+                            date=date_val,
+                            value=value,
                         )
                     )
 
             # Check existing values
+            all_dates = set(df[date_col].dropna())
+            all_indices = [name_to_index[col.lower()] for col in data_columns if col.lower() in name_to_index]
             existing_keys = set(
                 DailyIndexValue.objects.filter(
-                    index__in=[idx for _, idx in filtered_data_columns],
-                    date__in=row_dates,
+                    index__in=all_indices,
+                    date__in=all_dates,
                 ).values_list('index_id', 'date')
-            ) if row_dates else set()
+            ) if all_dates and all_indices else set()
 
             # Filter to create only new values
             values_to_create = []
@@ -195,19 +172,3 @@ class Command(BaseCommand):
                     f'Ignored {len(ignored_columns)} unknown columns.'
                 )
             )
-
-    def _parse_excel_date(self, value):
-        if isinstance(value, datetime):
-            return value.date()
-        if hasattr(value, 'year') and hasattr(value, 'month') and hasattr(value, 'day'):
-            return value
-        if isinstance(value, str):
-            cleaned = value.strip()
-            if not cleaned:
-                return None
-            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%d/%m/%Y'):
-                try:
-                    return datetime.strptime(cleaned, fmt).date()
-                except ValueError:
-                    continue
-        return None
