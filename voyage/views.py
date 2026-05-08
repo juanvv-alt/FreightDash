@@ -645,3 +645,158 @@ def tce_calculator(request):
             'db_error_message': str(exc),
         }
         return render(request, 'voyage/tce_calculator.html', context, status=200)
+
+
+import json
+import os
+import tempfile
+from datetime import datetime
+from django.contrib import messages
+from django.db import transaction
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
+
+
+def verify_pdf_indices(request, session_id):
+    """
+    View for verifying and validating extracted PDF indices before adding to database.
+    """
+    temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_pdf_upload')
+    temp_file = os.path.join(temp_dir, f'{session_id}.json')
+
+    if not os.path.exists(temp_file):
+        messages.error(request, 'Verification session not found or expired.')
+        return redirect('admin:voyage_availableindex_changelist')
+
+    try:
+        with open(temp_file, 'r') as f:
+            session_data = json.load(f)
+    except Exception as e:
+        messages.error(request, f'Error loading verification data: {e}')
+        return redirect('admin:voyage_availableindex_changelist')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'save_selected':
+            return _save_selected_indices(request, session_data, temp_file)
+        elif action == 'discard':
+            # Remove temp file
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+            messages.info(request, 'PDF upload cancelled.')
+            return redirect('admin:voyage_availableindex_changelist')
+
+    # Prepare data for template
+    extracted_tables = session_data.get('extracted_tables', [])
+    vessel_size = session_data.get('vessel_size', 'panamax')
+
+    # Get existing indices for validation
+    existing_indices = {
+        idx.name.lower(): idx.name
+        for idx in AvailableIndex.objects.filter(vessel_size=vessel_size, is_active=True)
+    }
+
+    context = {
+        'session_id': session_id,
+        'file_path': session_data.get('file_path', ''),
+        'vessel_size': vessel_size,
+        'extraction_time': session_data.get('extraction_time', ''),
+        'extracted_tables': extracted_tables,
+        'existing_indices': existing_indices,
+        'total_tables': len(extracted_tables),
+    }
+
+    return render(request, 'voyage/verify_pdf_indices.html', context)
+
+
+def _save_selected_indices(request, session_data, temp_file):
+    """
+    Save selected indices from the verification form.
+    """
+    selected_tables = request.POST.getlist('selected_tables')
+    vessel_size = session_data.get('vessel_size', 'panamax')
+    extracted_tables = session_data.get('extracted_tables', [])
+
+    if not selected_tables:
+        messages.warning(request, 'No tables selected for import.')
+        return redirect(request.META.get('HTTP_REFERER', 'admin:voyage_availableindex_changelist'))
+
+    saved_count = 0
+    error_count = 0
+
+    try:
+        with transaction.atomic():
+            for table_idx_str in selected_tables:
+                try:
+                    table_idx = int(table_idx_str)
+                    if table_idx >= len(extracted_tables):
+                        continue
+
+                    table_data = extracted_tables[table_idx]
+
+                    # Create missing indices
+                    index_columns = table_data['data']['index_columns']
+                    for idx_col in index_columns:
+                        if not idx_col.get('existing_index'):
+                            # Create new index
+                            next_order = AvailableIndex.objects.filter(vessel_size=vessel_size).aggregate(
+                                Max('order')
+                            )['order__max'] or 0
+                            AvailableIndex.objects.create(
+                                name=idx_col['name'],
+                                vessel_size=vessel_size,
+                                order=next_order + 1,
+                                is_active=True
+                            )
+
+                    # Save daily values
+                    from .models import DailyIndexValue
+                    values_to_create = []
+
+                    for row_data in table_data['data']['data']:
+                        row_date = datetime.fromisoformat(row_data['date']).date()
+
+                        for idx_name, idx_data in row_data['indices'].items():
+                            try:
+                                index_obj = AvailableIndex.objects.get(
+                                    name__iexact=idx_name,
+                                    vessel_size=vessel_size
+                                )
+                                values_to_create.append(
+                                    DailyIndexValue(
+                                        index=index_obj,
+                                        date=row_date,
+                                        value=idx_data['value']
+                                    )
+                                )
+                            except AvailableIndex.DoesNotExist:
+                                continue
+
+                    # Bulk create (ignore conflicts for existing data)
+                    DailyIndexValue.objects.bulk_create(values_to_create, ignore_conflicts=True)
+                    saved_count += len(values_to_create)
+
+                except Exception as e:
+                    error_count += 1
+                    continue
+
+    except Exception as e:
+        messages.error(request, f'Error saving indices: {e}')
+        return redirect(request.META.get('HTTP_REFERER', 'admin:voyage_availableindex_changelist'))
+
+    # Clean up temp file
+    try:
+        os.remove(temp_file)
+    except:
+        pass
+
+    if saved_count > 0:
+        messages.success(request, f'Successfully imported {saved_count} index values.')
+    if error_count > 0:
+        messages.warning(request, f'{error_count} tables had errors during import.')
+
+    return redirect('admin:voyage_availableindex_changelist')
