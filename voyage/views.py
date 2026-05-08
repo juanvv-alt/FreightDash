@@ -409,9 +409,24 @@ def freight_matrix(request):
         .order_by('name')
     )
 
+    warnings = []
+    
+    if not voyages:
+        warnings.append('No active voyages configured. Add voyages in Django admin.')
+        logger.warning('Freight matrix: No active voyages found')
+    
     hire_index_ids = [v.daily_hire_index_id for v in voyages if v.daily_hire_index_id]
+    voyages_without_hire_index = [v.name for v in voyages if not v.daily_hire_index_id]
+    if voyages_without_hire_index:
+        warnings.append(f'Voyages without daily hire index assignment: {", ".join(voyages_without_hire_index)}')
+        logger.warning(f'Freight matrix: Voyages without hire index: {voyages_without_hire_index}')
+    
     hire_values = DailyIndexValue.objects.filter(index_id__in=hire_index_ids, date__gte=start_date, date__lte=end_date)
     hire_map = {(v.index_id, v.date): v.value for v in hire_values}
+    
+    if hire_index_ids and not hire_map:
+        warnings.append(f'No daily hire index values found for date range {start_date} to {end_date}. Check uploaded index data.')
+        logger.warning(f'Freight matrix: No hire values found for indices {hire_index_ids} in date range')
 
     matrix_rows = []
     for row_date in date_rows:
@@ -481,6 +496,7 @@ def freight_matrix(request):
         'end_date': end_date,
         'voyages': voyages,
         'matrix_rows': matrix_rows,
+        'warnings': warnings,
     }
     return render(request, 'voyage/freight_matrix.html', context)
 

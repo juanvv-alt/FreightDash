@@ -78,6 +78,18 @@
     </div>
 </form>
 
+{% if warnings %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <strong>Configuration Issues:</strong>
+    <ul class="mb-0">
+        {% for warning in warnings %}
+        <li>{{ warning }}</li>
+        {% endfor %}
+    </ul>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
 <div class="matrix-card">
     <div class="matrix-table-wrap">
         <table class="table table-sm table-striped table-bordered mb-0">
