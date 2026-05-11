@@ -1,10 +1,19 @@
 import csv
-from datetime import timedelta
+import json
+import os
+import tempfile
+import uuid
+from datetime import datetime, timedelta
+from io import BytesIO
 
+import pdfplumber
+from django.contrib import messages
+from django.db import DatabaseError, ProgrammingError, transaction
+from django.db.models import Max
+from django.db.utils import OperationalError
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
-from django.db import DatabaseError, ProgrammingError
-from django.db.utils import OperationalError
+from django.urls import reverse
 from django.utils import timezone
 import logging
 from .models import RouteParameters
@@ -647,15 +656,320 @@ def tce_calculator(request):
         return render(request, 'voyage/tce_calculator.html', context, status=200)
 
 
-import json
-import os
-import tempfile
-from datetime import datetime
-from django.contrib import messages
-from django.db import transaction
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse
+def upload_pdf_indices(request):
+    vessel_size_choices = [
+        ('capesize', 'Capesize'),
+        ('panamax', 'Panamax'),
+        ('supramax', 'Supramax'),
+        ('handysize', 'Handysize'),
+        ('bunker', 'Bunker'),
+    ]
+
+    if request.method == 'POST':
+        upload_file = request.FILES.get('upload_file')
+        vessel_size = request.POST.get('vessel_size', 'panamax')
+        pages = request.POST.get('pages', 'all').strip() or 'all'
+
+        if not upload_file:
+            messages.error(request, 'Please select a PDF file to upload.')
+            return render(
+                request,
+                'voyage/upload_pdf_indices.html',
+                {
+                    'vessel_size_choices': vessel_size_choices,
+                    'selected_vessel_size': vessel_size,
+                    'pages': pages,
+                },
+            )
+
+        try:
+            extracted_tables = _extract_pdf_index_tables(
+                upload_file.read(), vessel_size, pages
+            )
+        except Exception as exc:
+            messages.error(request, f'Unable to extract PDF indices: {exc}')
+            return render(
+                request,
+                'voyage/upload_pdf_indices.html',
+                {
+                    'vessel_size_choices': vessel_size_choices,
+                    'selected_vessel_size': vessel_size,
+                    'pages': pages,
+                },
+            )
+
+        if not extracted_tables:
+            messages.warning(
+                request,
+                'No index tables were found in the uploaded PDF. Please check the file and try again.',
+            )
+            return render(
+                request,
+                'voyage/upload_pdf_indices.html',
+                {
+                    'vessel_size_choices': vessel_size_choices,
+                    'selected_vessel_size': vessel_size,
+                    'pages': pages,
+                },
+            )
+
+        session_id = str(uuid.uuid4())
+        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_pdf_upload')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file = os.path.join(temp_dir, f'{session_id}.json')
+
+        session_data = {
+            'file_path': upload_file.name,
+            'vessel_size': vessel_size,
+            'pages': pages,
+            'extracted_tables': extracted_tables,
+            'extraction_time': datetime.now().isoformat(),
+            'session_id': session_id,
+        }
+
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(session_data, f, indent=2, default=str)
+
+        return redirect('voyage:verify_pdf_indices', session_id=session_id)
+
+    return render(
+        request,
+        'voyage/upload_pdf_indices.html',
+        {
+            'vessel_size_choices': vessel_size_choices,
+            'selected_vessel_size': 'panamax',
+            'pages': 'all',
+        },
+    )
+
+
+def _parse_pdf_pages(pages_str):
+    pages_str = str(pages_str or 'all').strip().lower()
+    if pages_str in ('all', ''):
+        return 'all'
+
+    parsed_pages = []
+    for part in pages_str.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            start, end = part.split('-', 1)
+            parsed_pages.extend(range(int(start.strip()), int(end.strip()) + 1))
+        else:
+            parsed_pages.append(int(part))
+
+    return sorted(set(parsed_pages))
+
+
+def _extract_pdf_index_tables(file_bytes, vessel_size, pages):
+    page_numbers = _parse_pdf_pages(pages)
+
+    with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+        if page_numbers == 'all':
+            pages_to_process = list(pdf.pages)
+        else:
+            pages_to_process = [
+                pdf.pages[i - 1]
+                for i in page_numbers
+                if 1 <= i <= len(pdf.pages)
+            ]
+
+        if not pages_to_process:
+            return []
+
+        existing_indices = {
+            idx.name.strip().lower(): idx
+            for idx in AvailableIndex.objects.filter(
+                vessel_size=vessel_size,
+                is_active=True,
+            )
+        }
+
+        extracted_tables = []
+        for page_index, page in enumerate(pages_to_process, start=1):
+            tables = page.extract_tables()
+            if not tables:
+                continue
+
+            for table_index, table in enumerate(tables):
+                if not table or len(table) < 2:
+                    continue
+
+                cleaned_table = [
+                    [str(cell).strip() if cell is not None else '' for cell in row]
+                    for row in table
+                    if row is not None
+                ]
+
+                header_row_idx, headers = _find_header_row(cleaned_table)
+                if header_row_idx is None or not headers:
+                    continue
+
+                date_col_idx = None
+                for idx, header in enumerate(headers):
+                    if header and any(
+                        keyword in header.lower()
+                        for keyword in ['date', 'period', 'month', 'day']
+                    ):
+                        date_col_idx = idx
+                        break
+                if date_col_idx is None:
+                    date_col_idx = 0
+
+                index_columns = []
+                for idx, header in enumerate(headers):
+                    if idx == date_col_idx or not header:
+                        continue
+                    normalized = header.strip()
+                    index_columns.append(
+                        {
+                            'name': normalized,
+                            'column_index': idx,
+                            'existing_index': normalized.strip().lower() in existing_indices,
+                        }
+                    )
+
+                if not index_columns:
+                    continue
+
+                processed_rows = []
+                for row in cleaned_table[header_row_idx + 1 :]:
+                    if len(row) <= date_col_idx:
+                        continue
+
+                    date_str = row[date_col_idx].strip()
+                    if not date_str:
+                        continue
+
+                    parsed_date = _parse_date(date_str)
+                    if not parsed_date:
+                        continue
+
+                    indices = {}
+                    for idx_col in index_columns:
+                        if idx_col['column_index'] >= len(row):
+                            continue
+                        raw_value = row[idx_col['column_index']]
+                        if raw_value is None:
+                            continue
+                        value_text = str(raw_value).strip()
+                        if not value_text:
+                            continue
+
+                        cleaned_value = (
+                            value_text.replace(',', '')
+                            .replace('$', '')
+                            .replace('£', '')
+                            .replace('€', '')
+                            .strip()
+                        )
+
+                        try:
+                            value = float(cleaned_value)
+                        except ValueError:
+                            continue
+
+                        indices[idx_col['name']] = {
+                            'value': value,
+                            'original_value': value_text,
+                            'existing': idx_col['existing_index'],
+                        }
+
+                    if indices:
+                        processed_rows.append(
+                            {
+                                'date': parsed_date.isoformat(),
+                                'original_date': date_str,
+                                'indices': indices,
+                            }
+                        )
+
+                if not processed_rows:
+                    continue
+
+                extracted_tables.append(
+                    {
+                        'page': page_index,
+                        'table_index': table_index,
+                        'data': {
+                            'headers': headers,
+                            'date_column': date_col_idx,
+                            'index_columns': index_columns,
+                            'data': processed_rows,
+                            'total_rows': len(processed_rows),
+                        },
+                        'raw_table': cleaned_table[:10],
+                    }
+                )
+
+        return extracted_tables
+
+
+def _find_header_row(cleaned_table):
+    for row_index, row in enumerate(cleaned_table):
+        if any(
+            cell
+            and any(keyword in cell.lower() for keyword in ['date', 'period', 'month', 'day'])
+            for cell in row
+        ):
+            return row_index, row
+    return (0, cleaned_table[0]) if cleaned_table else (None, [])
+
+
+def _parse_date(value):
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+
+        formats = [
+            '%Y-%m-%d',
+            '%d/%m/%Y',
+            '%m/%d/%Y',
+            '%d-%m-%Y',
+            '%m-%d-%Y',
+            '%b %d, %Y',
+            '%B %d, %Y',
+            '%d %b %Y',
+            '%d %B %Y',
+            '%Y/%m/%d',
+        ]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(cleaned, fmt).date()
+            except ValueError:
+                continue
+
+        normalized = cleaned.replace('/', '-').replace('.', '-').lower()
+        month_names = {
+            'jan': '01',
+            'feb': '02',
+            'mar': '03',
+            'apr': '04',
+            'may': '05',
+            'jun': '06',
+            'jul': '07',
+            'aug': '08',
+            'sep': '09',
+            'oct': '10',
+            'nov': '11',
+            'dec': '12',
+        }
+        for month_name, month_num in month_names.items():
+            if month_name in normalized:
+                normalized = normalized.replace(month_name, month_num)
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(normalized, fmt).date()
+            except ValueError:
+                continue
+
+    return None
 
 
 def verify_pdf_indices(request, session_id):
@@ -667,14 +981,14 @@ def verify_pdf_indices(request, session_id):
 
     if not os.path.exists(temp_file):
         messages.error(request, 'Verification session not found or expired.')
-        return redirect('admin:voyage_availableindex_changelist')
+        return redirect('voyage:upload_pdf_indices')
 
     try:
         with open(temp_file, 'r') as f:
             session_data = json.load(f)
     except Exception as e:
         messages.error(request, f'Error loading verification data: {e}')
-        return redirect('admin:voyage_availableindex_changelist')
+        return redirect('voyage:upload_pdf_indices')
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -688,7 +1002,7 @@ def verify_pdf_indices(request, session_id):
             except:
                 pass
             messages.info(request, 'PDF upload cancelled.')
-            return redirect('admin:voyage_availableindex_changelist')
+            return redirect('voyage:upload_pdf_indices')
 
     # Prepare data for template
     extracted_tables = session_data.get('extracted_tables', [])
@@ -723,7 +1037,7 @@ def _save_selected_indices(request, session_data, temp_file):
 
     if not selected_tables:
         messages.warning(request, 'No tables selected for import.')
-        return redirect(request.META.get('HTTP_REFERER', 'admin:voyage_availableindex_changelist'))
+        return redirect(request.META.get('HTTP_REFERER', reverse('voyage:upload_pdf_indices')))
 
     saved_count = 0
     error_count = 0
@@ -786,7 +1100,7 @@ def _save_selected_indices(request, session_data, temp_file):
 
     except Exception as e:
         messages.error(request, f'Error saving indices: {e}')
-        return redirect(request.META.get('HTTP_REFERER', 'admin:voyage_availableindex_changelist'))
+        return redirect(request.META.get('HTTP_REFERER', reverse('voyage:upload_pdf_indices')))
 
     # Clean up temp file
     try:
@@ -799,4 +1113,4 @@ def _save_selected_indices(request, session_data, temp_file):
     if error_count > 0:
         messages.warning(request, f'{error_count} tables had errors during import.')
 
-    return redirect('admin:voyage_availableindex_changelist')
+    return redirect('voyage:upload_pdf_indices')

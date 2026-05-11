@@ -334,13 +334,13 @@
                                 <td>{{ row.date|date:"M j, Y" }}</td>
                                 <td>
                                     <span class="index-name">{{ index_name }}</span>
-                                    {% if not table.data.index_columns|lookup:forloop.parentloop.counter0|lookup:"existing_index" %}
+                                    {% if not index_data.existing %}
                                         <span class="index-new">NEW</span>
                                     {% endif %}
                                 </td>
                                 <td class="value-cell">{{ index_data.value }}</td>
                                 <td>
-                                    {% if existing_indices|get:index_name|lower == index_name|lower %}
+                                    {% if index_data.existing %}
                                         <span style="color: #28a745;">✓ Existing</span>
                                     {% else %}
                                         <span style="color: #007bff;">+ New Index</span>

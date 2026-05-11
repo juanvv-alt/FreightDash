@@ -20,6 +20,13 @@ The system uses `pdfplumber` for PDF parsing.
 
 ## Usage
 
+### Browser Upload
+
+1. Open the upload page in the dashboard:
+   `http://localhost:8000/upload-pdf-indices/`
+2. Choose the PDF file, select the vessel size, and optionally set the page range.
+3. Submit the form to extract and open the verification page.
+
 ### Manual Upload
 
 1. **Extract indices from PDF**:
@@ -34,21 +41,27 @@ python manage.py upload_indices_pdf /path/to/report.pdf --vessel-size=panamax --
 
 ### Daily Automated Upload
 
-Use the provided batch script for Windows Task Scheduler:
+#### Linux / macOS
 
-```batch
-upload_pdf_indices.bat "C:\Reports\daily_indices.pdf" panamax "1-2"
+Use the provided shell script:
+
+```bash
+./upload_pdf_indices.sh /path/to/daily_indices.pdf panamax "1-2"
 ```
 
-#### Setting up Windows Task Scheduler
+For a daily cron job, add an entry like this:
 
-1. Open Task Scheduler
-2. Create a new task
-3. Set trigger to daily at your preferred time
-4. Set action to "Start a program"
-5. Program: `C:\Users\juan.vanvyve\.vscode\FreightDash\upload_pdf_indices.bat`
-6. Arguments: `"C:\Path\To\Your\PDF\report.pdf" panamax "1-2"`
-7. Start in: `C:\Users\juan.vanvyve\.vscode\FreightDash`
+```cron
+0 7 * * * cd /path/to/FreightDash && /usr/bin/env bash ./upload_pdf_indices.sh /path/to/daily_indices.pdf panamax "1-2" >> /path/to/FreightDash/logs/upload_pdf_indices.log 2>&1
+```
+
+#### Cross-platform Alternative
+
+If you prefer not to use a shell script, run the management command directly:
+
+```bash
+python manage.py upload_indices_pdf /path/to/daily_indices.pdf --vessel-size=panamax --pages=1-2
+```
 
 ## Command Options
 
