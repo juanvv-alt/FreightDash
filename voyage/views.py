@@ -786,6 +786,18 @@ def _extract_pdf_index_tables(file_bytes, vessel_size, pages):
             )
         }
 
+        # Try to extract date from PDF text (usually in header)
+        document_date = None
+        for page in pages_to_process:
+            page_text = page.extract_text() or ''
+            for line in page_text.split('\n')[:20]:  # Check first 20 lines for date
+                parsed = _parse_date(line.strip())
+                if parsed:
+                    document_date = parsed
+                    break
+            if document_date:
+                break
+
         extracted_tables = []
         for page_index, page in enumerate(pages_to_process, start=1):
             tables = page.extract_tables()
@@ -806,22 +818,31 @@ def _extract_pdf_index_tables(file_bytes, vessel_size, pages):
                 if header_row_idx is None or not headers:
                     continue
 
+                # Find date column - could be "Date", "Period", or something like "Today"
                 date_col_idx = None
+                date_col_is_explicit = False
                 for idx, header in enumerate(headers):
                     if header and any(
                         keyword in header.lower()
                         for keyword in ['date', 'period', 'month', 'day']
                     ):
                         date_col_idx = idx
+                        date_col_is_explicit = True
                         break
+
+                # If no explicit date column, use the first column as the index name
                 if date_col_idx is None:
                     date_col_idx = 0
 
                 index_columns = []
                 for idx, header in enumerate(headers):
-                    if idx == date_col_idx or not header:
+                    if idx == date_col_idx and date_col_is_explicit:
+                        continue
+                    if not header or header.lower() in ['change', 'change %', 'change%', '%', 'mtd', 'ytd', 'today']:
                         continue
                     normalized = header.strip()
+                    if len(normalized) < 2:
+                        continue
                     index_columns.append(
                         {
                             'name': normalized,
@@ -835,26 +856,39 @@ def _extract_pdf_index_tables(file_bytes, vessel_size, pages):
 
                 processed_rows = []
                 for row in cleaned_table[header_row_idx + 1 :]:
-                    if len(row) <= date_col_idx:
+                    if len(row) < 1:
                         continue
 
-                    date_str = row[date_col_idx].strip()
-                    if not date_str:
-                        continue
+                    # Get date from row or use document date
+                    parsed_date = document_date
+                    if date_col_is_explicit and len(row) > date_col_idx:
+                        date_str = row[date_col_idx].strip()
+                        if date_str:
+                            parsed = _parse_date(date_str)
+                            if parsed:
+                                parsed_date = parsed
 
-                    parsed_date = _parse_date(date_str)
                     if not parsed_date:
                         continue
 
+                    # Index name is usually in the first column
+                    index_name = row[0].strip() if len(row) > 0 else ''
+                    if not index_name or len(index_name) < 2:
+                        continue
+
                     indices = {}
+
+                    # Try to get the "Today" value (usually second column if first is name)
+                    # or first numeric column if the date is explicit
                     for idx_col in index_columns:
-                        if idx_col['column_index'] >= len(row):
+                        col_idx = idx_col['column_index']
+                        if col_idx >= len(row):
                             continue
-                        raw_value = row[idx_col['column_index']]
+                        raw_value = row[col_idx]
                         if raw_value is None:
                             continue
                         value_text = str(raw_value).strip()
-                        if not value_text:
+                        if not value_text or value_text.lower() in ['change', 'change %', 'change%', '%', 'mtd', 'ytd']:
                             continue
 
                         cleaned_value = (
@@ -870,17 +904,22 @@ def _extract_pdf_index_tables(file_bytes, vessel_size, pages):
                         except ValueError:
                             continue
 
-                        indices[idx_col['name']] = {
+                        # Use the row's first column as the index name if header was generic
+                        final_index_name = index_col['name']
+                        if idx_col['column_index'] == 0:
+                            final_index_name = index_name
+
+                        indices[final_index_name] = {
                             'value': value,
                             'original_value': value_text,
-                            'existing': idx_col['existing_index'],
+                            'existing': final_index_name.strip().lower() in existing_indices,
                         }
 
                     if indices:
                         processed_rows.append(
                             {
                                 'date': parsed_date.isoformat(),
-                                'original_date': date_str,
+                                'original_date': parsed_date.strftime('%d %b %Y'),
                                 'indices': indices,
                             }
                         )
