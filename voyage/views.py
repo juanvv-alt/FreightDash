@@ -905,7 +905,7 @@ def _extract_pdf_index_tables(file_bytes, vessel_size, pages):
                             continue
 
                         # Use the row's first column as the index name if header was generic
-                        final_index_name = index_col['name']
+                        final_index_name = idx_col['name']
                         if idx_col['column_index'] == 0:
                             final_index_name = index_name
 
