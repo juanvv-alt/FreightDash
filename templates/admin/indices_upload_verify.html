@@ -15,10 +15,6 @@
             <div>{{ sheet_name }}</div>
         </div>
         <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
-            <strong>Vessel size</strong>
-            <div>{{ vessel_size }}</div>
-        </div>
-        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
             <strong>Rows</strong>
             <div>{{ row_count }}</div>
         </div>
@@ -32,7 +28,7 @@
         {% if missing_indices %}
         <div style="padding:12px; border:1px solid #f5c6cb; background:#f8d7da; border-radius:6px; margin-bottom:12px;">
             <strong>Missing indices detected:</strong>
-            <div style="margin-top:8px;">The following indices in the uploaded file do not exist in Available Indices for vessel <em>{{ vessel_size }}</em>:</div>
+            <div style="margin-top:8px;">The following indices in the uploaded file do not exist in Available Indices:</div>
             <ul>
                 {% for mi in missing_indices %}
                 <li>{{ mi }}</li>
@@ -41,6 +37,42 @@
             <div style="margin-top:8px; color:#721c24;">Please add these indices in <a href="{% url 'admin:voyage_availableindex_changelist' %}">Available Indices</a> or update the source file and re-upload. Import is disabled until missing indices are added.</div>
         </div>
         {% endif %}
+        <div style="padding:12px; border:1px solid #ddd; background:#fafafa; border-radius:6px; margin-bottom:12px;">
+            <h3>Mapping: match uploaded indices to Available Indices</h3>
+            <form method="post" style="display:block;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_mapping">
+                <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+                    <thead>
+                        <tr style="background:#f1f1f1;">
+                            <th style="padding:8px; border:1px solid #ddd;">Uploaded Index</th>
+                            <th style="padding:8px; border:1px solid #ddd;">Suggested RateCode</th>
+                            <th style="padding:8px; border:1px solid #ddd;">Map To Available Index</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in mapping_rows %}
+                        <tr>
+                            <td style="padding:8px; border:1px solid #ddd;">{{ row.uploaded_name }}</td>
+                            <td style="padding:8px; border:1px solid #ddd;">{{ row.uploaded_name }}</td>
+                            <td style="padding:8px; border:1px solid #ddd;">
+                                <input type="hidden" name="mapping_key__{{ forloop.counter0 }}" value="{{ row.uploaded_name }}">
+                                <select name="mapping__{{ forloop.counter0 }}" style="width:100%; padding:6px;">
+                                    <option value="">-- choose existing index --</option>
+                                    {% for aid, aname in available_indices %}
+                                        <option value="{{ aid }}" {% if aname and row.selected and row.selected == aid %}selected{% endif %}>{{ aname }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div style="margin-top:10px;">
+                    <button type="submit" class="default">Save mappings</button>
+                </div>
+            </form>
+        </div>
         <h2>Sample values</h2>
         <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 6px;">
             <table style="width: 100%; border-collapse: collapse;">

@@ -8,13 +8,7 @@
     <div style="border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin: 16px 0;">
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            <div style="margin-bottom: 10px;">
-                {{ form.vessel_size.label_tag }}<br>
-                {{ form.vessel_size }}
-                {% if form.vessel_size.help_text %}
-                <p style="margin: 6px 0 0; color: #666;">{{ form.vessel_size.help_text }}</p>
-                {% endif %}
-            </div>
+            <!-- Vessel size selection removed: uploads cover all vessel sizes -->
             <div style="margin-bottom: 10px;">
                 {{ form.upload_file.label_tag }}<br>
                 {{ form.upload_file }}

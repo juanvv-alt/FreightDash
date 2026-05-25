@@ -29,16 +29,6 @@ from .models import (
 
 
 class IndexUploadForm(forms.Form):
-    vessel_size = forms.ChoiceField(
-        choices=[
-            ('capesize', 'Capesize'),
-            ('panamax', 'Panamax'),
-            ('supramax', 'Supramax'),
-            ('handysize', 'Handysize'),
-            ('bunker', 'Bunker'),
-        ],
-        help_text='Assign new index headers to this vessel size if they are not already configured.',
-    )
     upload_file = forms.FileField(help_text='Upload preset Excel file (.xlsx) with Date and index columns.')
 
 
@@ -261,7 +251,6 @@ def upload_indices_view(request):
     if request.method == 'POST':
         form = IndexUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            vessel_size = form.cleaned_data['vessel_size']
             upload_file = form.cleaned_data['upload_file']
 
             try:
@@ -378,7 +367,6 @@ def upload_indices_view(request):
                 session_data = {
                     'session_id': session_id,
                     'file_name': upload_file.name,
-                    'vessel_size': vessel_size,
                     'sheet_name': sheet.title,
                     'header_row_idx': header_row_idx,
                     'columns': {
@@ -427,6 +415,33 @@ def upload_indices_verify_view(request, session_id):
 
     if request.method == 'POST':
         action = request.POST.get('action')
+        if action == 'save_mapping':
+            # Save mapping selections provided by admin
+            unique_indices = session_data.get('unique_indices', [])
+            mappings = session_data.get('mappings', {}) or {}
+            for i, uploaded_name in enumerate(unique_indices):
+                key = f'mapping__{i}'
+                selected = request.POST.get(key)
+                if selected:
+                    try:
+                        mappings[uploaded_name.strip().lower()] = int(selected)
+                    except (TypeError, ValueError):
+                        mappings.pop(uploaded_name.strip().lower(), None)
+                else:
+                    mappings.pop(uploaded_name.strip().lower(), None)
+
+            session_data['mappings'] = mappings
+            # write back
+            try:
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(session_data, f, indent=2, default=str)
+            except Exception:
+                messages.error(request, 'Unable to save mapping selections.')
+                return redirect(reverse('admin:indices-upload-verify', args=[session_id]))
+
+            messages.success(request, 'Mappings updated.')
+            return redirect(reverse('admin:indices-upload-verify', args=[session_id]))
+
         if action == 'import':
             return _save_excel_indices(request, session_data, temp_file)
         if action == 'discard':
@@ -437,32 +452,59 @@ def upload_indices_verify_view(request, session_id):
             messages.info(request, 'Excel upload discarded.')
             return redirect(reverse('admin:indices-upload'))
 
-    # Prepare existing indices for the vessel to allow verification of RateCode
-    vessel_size = session_data.get('vessel_size', '')
-    existing_index_qs = AvailableIndex.objects.filter(vessel_size=vessel_size, is_active=True)
-    existing_index_names_lower = set(name.strip().lower() for name in existing_index_qs.values_list('name', flat=True))
-    # find any indices present in upload that are not in DB
-    uploaded_unique = set([n.strip().lower() for n in session_data.get('unique_indices', []) if n])
-    missing_indices = sorted([n for n in uploaded_unique if n not in existing_index_names_lower])
+    # Prepare existing indices for the vessel to allow verification and mapping of RateCode
+        # Prepare existing indices across all vessel sizes to allow verification and mapping of RateCode
+        existing_index_qs = AvailableIndex.objects.filter(is_active=True)
+        existing_index_names_lower = set(name.strip().lower() for name in existing_index_qs.values_list('name', flat=True))
+        existing_index_map_lower = {name.strip().lower(): idx for idx, name in existing_index_qs.values_list('id', 'name')}
+
+    # session mappings (uploaded_name_lower -> available_index_id)
+    session_mappings = session_data.get('mappings', {}) or {}
+
+    # determine uploaded unique indices and which are missing (no DB match and no mapping)
+    uploaded_unique = [n for n in session_data.get('unique_indices', []) if n]
+    uploaded_unique_lower = set([n.strip().lower() for n in uploaded_unique])
+    missing_indices = sorted([n for n in uploaded_unique_lower if (n not in existing_index_names_lower) and (n not in session_mappings)])
+
+    # prepare available indices choices for mapping UI (id, name)
+    available_indices = list(existing_index_qs.order_by('name').values_list('id', 'name'))
+    # prepare mapping selections to prefill (use saved mapping or auto-match by name)
+    mapping_selected = {}
+    for name in uploaded_unique:
+        lname = name.strip().lower()
+        if lname in session_mappings:
+            mapping_selected[lname] = session_mappings.get(lname)
+        elif lname in existing_index_map_lower:
+            mapping_selected[lname] = existing_index_map_lower.get(lname)
+        else:
+            mapping_selected[lname] = None
+
+    # Build ordered mapping rows for template (preserve uploaded order)
+    mapping_rows = []
+    for name in uploaded_unique:
+        lname = name.strip().lower()
+        mapping_rows.append({'uploaded_name': name, 'uploaded_name_lower': lname, 'selected': mapping_selected.get(lname)})
 
     context = {
         **admin.site.each_context(request),
         'title': 'Review Baltic Index Upload',
         'session_id': session_id,
         'file_name': session_data.get('file_name', ''),
-        'vessel_size': session_data.get('vessel_size', ''),
         'sheet_name': session_data.get('sheet_name', ''),
         'rows': session_data.get('rows', []),
         'unique_indices': session_data.get('unique_indices', []),
         'row_count': len(session_data.get('rows', [])),
         'existing_indices_lower': existing_index_names_lower,
         'missing_indices': missing_indices,
+        'available_indices': available_indices,
+        'mapping_selected': mapping_selected,
+        'mapping_rows': mapping_rows,
     }
     return render(request, 'admin/indices_upload_verify.html', context)
 
 
 def _save_excel_indices(request, session_data, temp_file):
-    vessel_size = session_data.get('vessel_size', 'panamax')
+    # No vessel size is required; indices are matched across all vessel sizes
     extracted_rows = session_data.get('rows', [])
     if not extracted_rows:
         messages.error(request, 'No extracted rows available to import.')
