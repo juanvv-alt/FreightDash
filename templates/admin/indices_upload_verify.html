@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width: 1100px;">
+    <h1>Review Baltic Index Upload</h1>
+    <p>Confirm the parsed spot values from sheet <strong>{{ sheet_name }}</strong> before they are imported to Daily Index Values.</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
+            <strong>File</strong>
+            <div>{{ file_name }}</div>
+        </div>
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
+            <strong>Sheet</strong>
+            <div>{{ sheet_name }}</div>
+        </div>
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
+            <strong>Vessel size</strong>
+            <div>{{ vessel_size }}</div>
+        </div>
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
+            <strong>Rows</strong>
+            <div>{{ row_count }}</div>
+        </div>
+        <div style="padding: 16px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa;">
+            <strong>Unique indices</strong>
+            <div>{{ unique_indices|length }}</div>
+        </div>
+    </div>
+
+    <div style="margin-bottom: 32px;">
+        <h2>Sample values</h2>
+        <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 6px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f4f4f4;">
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Index Name</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">RateDate</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Value</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">RatePeriodDescription</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows|slice:":100" %}
+                        <tr>
+                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.index_name }}</td>
+                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.rate_date_text }}</td>
+                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.value }}</td>
+                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.original_period }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" style="border: 1px solid #ddd; padding: 10px; text-align: center;">No rows found.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if rows|length > 100 %}
+        <p style="margin-top: 10px; color: #555;">Showing the first 100 rows of {{ rows|length }}.</p>
+        {% endif %}
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="session_id" value="{{ session_id }}">
+        <button type="submit" name="action" value="import" class="default" style="margin-right: 12px;">Import values</button>
+        <button type="submit" name="action" value="discard" class="deletelink">Discard</button>
+    </form>
+</div>
+{% endblock %}

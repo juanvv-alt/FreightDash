@@ -1,3 +1,7 @@
+import json
+import os
+import tempfile
+import uuid
 from datetime import datetime
 from io import BytesIO
 
@@ -227,6 +231,32 @@ def _parse_excel_date(value):
     return None
 
 
+def _normalize_header(value):
+    if value is None:
+        return ''
+    return str(value).strip().lower()
+
+
+def _find_excel_header_row(sheet):
+    headers = []
+    for row_idx, row in enumerate(sheet.iter_rows(min_row=1, max_row=20, values_only=True), start=1):
+        cleaned = [str(cell).strip() if cell is not None else '' for cell in row]
+        lowered = [value.lower() for value in cleaned]
+        if any(name in lowered for name in ['ratedate', 'rate date', 'date']) and any(
+            name in lowered for name in ['rateperioddescription', 'rate period description', 'rate period', 'period description', 'period']
+        ) and any(name in lowered for name in ['value', 'ratevalue', 'rate value']):
+            return row_idx, cleaned
+    return None, []
+
+
+def _find_excel_sheet(workbook, expected_sheet_name='Baltic'):
+    normalized_expected = expected_sheet_name.strip().lower()
+    for sheet_name in workbook.sheetnames:
+        if sheet_name.strip().lower() == normalized_expected:
+            return workbook[sheet_name]
+    return None
+
+
 def upload_indices_view(request):
     if request.method == 'POST':
         form = IndexUploadForm(request.POST, request.FILES)
@@ -236,155 +266,127 @@ def upload_indices_view(request):
 
             try:
                 workbook = load_workbook(filename=BytesIO(upload_file.read()), data_only=True, read_only=True)
-                sheet = workbook.active
-            except Exception:
-                messages.error(request, 'Unable to read Excel file. Please upload a valid .xlsx file.')
+                sheet = _find_excel_sheet(workbook, expected_sheet_name='Baltic')
+                if sheet is None:
+                    messages.error(request, "Sheet named ' Baltic' or 'Baltic' was not found in the uploaded file.")
+                    return redirect(reverse('admin:indices-upload'))
+
+                header_row_idx, headers = _find_excel_header_row(sheet)
+                if not header_row_idx:
+                    messages.error(request, 'Header row with RateDate, RatePeriodDescription and Value columns was not found.')
+                    return redirect(reverse('admin:indices-upload'))
+
+                normalized_headers = [h.strip() if h else '' for h in headers]
+                date_col_idx = None
+                period_col_idx = None
+                value_col_idx = None
+                index_name_col_idx = None
+
+                index_name_candidates = [
+                    'indexname', 'index name', 'ratename', 'rate name', 'ratedescription',
+                    'rate description', 'index', 'name', 'rate', 'curve', 'curve name', 'rate index'
+                ]
+
+                for idx, header in enumerate(normalized_headers):
+                    lower_header = header.lower()
+                    if lower_header in ['ratedate', 'rate date', 'date']:
+                        date_col_idx = idx
+                    elif lower_header in ['rateperioddescription', 'rate period description', 'rate period', 'period description', 'period']:
+                        period_col_idx = idx
+                    elif lower_header in ['value', 'ratevalue', 'rate value', 'rate']:
+                        value_col_idx = idx
+                    elif any(candidate == lower_header for candidate in index_name_candidates):
+                        index_name_col_idx = idx
+
+                if date_col_idx is None:
+                    messages.error(request, 'Could not find the RateDate column in the file.')
+                    return redirect(reverse('admin:indices-upload'))
+                if period_col_idx is None:
+                    messages.error(request, 'Could not find the RatePeriodDescription column in the file.')
+                    return redirect(reverse('admin:indices-upload'))
+                if value_col_idx is None:
+                    messages.error(request, 'Could not find the Value column in the file.')
+                    return redirect(reverse('admin:indices-upload'))
+
+                if index_name_col_idx is None:
+                    for idx, header in enumerate(normalized_headers):
+                        if idx not in {date_col_idx, period_col_idx, value_col_idx} and header:
+                            index_name_col_idx = idx
+                            break
+
+                if index_name_col_idx is None:
+                    messages.error(request, 'Could not find an index name column in the file.')
+                    return redirect(reverse('admin:indices-upload'))
+
+                extracted_rows = []
+                unique_indices = set()
+                for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
+                    if not row:
+                        continue
+
+                    rate_period = str(row[period_col_idx]).strip() if len(row) > period_col_idx and row[period_col_idx] is not None else ''
+                    if rate_period.lower() != 'spot':
+                        continue
+
+                    raw_date = row[date_col_idx] if len(row) > date_col_idx else None
+                    parsed_date = _parse_excel_date(raw_date)
+                    if not parsed_date:
+                        continue
+
+                    raw_value = row[value_col_idx] if len(row) > value_col_idx else None
+                    if raw_value in (None, ''):
+                        continue
+                    try:
+                        numeric_value = float(raw_value)
+                    except (TypeError, ValueError):
+                        continue
+
+                    raw_index_name = row[index_name_col_idx] if len(row) > index_name_col_idx else None
+                    index_name = str(raw_index_name).strip() if raw_index_name is not None else ''
+                    if not index_name:
+                        continue
+
+                    unique_indices.add(index_name)
+                    extracted_rows.append({
+                        'index_name': index_name,
+                        'rate_date': parsed_date.isoformat(),
+                        'rate_date_text': parsed_date.strftime('%Y-%m-%d'),
+                        'value': numeric_value,
+                        'original_period': rate_period,
+                    })
+
+                if not extracted_rows:
+                    messages.error(request, 'No spot rows were found in the Baltic sheet with valid RateDate and Value entries.')
+                    return redirect(reverse('admin:indices-upload'))
+
+                session_id = str(uuid.uuid4())
+                temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+                os.makedirs(temp_dir, exist_ok=True)
+                temp_file = os.path.join(temp_dir, f'{session_id}.json')
+
+                session_data = {
+                    'file_name': upload_file.name,
+                    'vessel_size': vessel_size,
+                    'sheet_name': sheet.title,
+                    'header_row_idx': header_row_idx,
+                    'columns': {
+                        'date': date_col_idx,
+                        'period': period_col_idx,
+                        'value': value_col_idx,
+                        'index_name': index_name_col_idx,
+                    },
+                    'rows': extracted_rows,
+                    'unique_indices': sorted(unique_indices),
+                    'created_at': datetime.now().isoformat(),
+                }
+
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    json.dump(session_data, f, indent=2, default=str)
+
+                return redirect(reverse('admin:indices-upload-verify', args=[session_id]))
+            except Exception as exc:
+                messages.error(request, f'Unable to read or parse the uploaded Excel file: {exc}')
                 return redirect(reverse('admin:indices-upload'))
-
-            header_row_idx = None
-            headers = []
-            for row_idx, row in enumerate(sheet.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
-                cleaned_row = [str(cell).strip() if cell is not None else '' for cell in row]
-                if any(cell.lower() == 'date' for cell in cleaned_row):
-                    header_row_idx = row_idx
-                    headers = cleaned_row
-                    break
-
-            if not header_row_idx:
-                messages.error(request, 'Header row with a Date column was not found.')
-                return redirect(reverse('admin:indices-upload'))
-
-            date_col_idx = None
-            for idx, name in enumerate(headers):
-                if name.lower() == 'date':
-                    date_col_idx = idx
-                    break
-
-            if date_col_idx is None:
-                messages.error(request, 'Date column is missing in the uploaded file.')
-                return redirect(reverse('admin:indices-upload'))
-
-            data_columns = []
-            for idx, header in enumerate(headers):
-                normalized = header.strip()
-                if idx == date_col_idx or not normalized:
-                    continue
-                data_columns.append((idx, normalized))
-
-            if not data_columns:
-                messages.error(request, 'No index columns found in the uploaded file.')
-                return redirect(reverse('admin:indices-upload'))
-
-            with transaction.atomic():
-                    normalized_headers = {
-                        header.strip().lower(): header.strip()
-                        for _, header in data_columns
-                        if header and header.strip()
-                    }
-                    existing_query = Q()
-                    for header in normalized_headers.values():
-                        existing_query |= Q(name__iexact=header)
-                    existing_indices = AvailableIndex.objects.filter(existing_query) if existing_query else AvailableIndex.objects.none()
-                    name_to_index = {
-                        index.name.strip().lower(): index
-                        for index in existing_indices
-                    }
-
-                    missing_headers = [
-                        normalized_headers[normalized]
-                        for normalized in normalized_headers
-                        if normalized not in name_to_index
-                    ]
-
-                    if missing_headers:
-                        next_order = AvailableIndex.objects.filter(vessel_size=vessel_size).aggregate(
-                            max_order=Max('order')
-                        )['max_order'] or 0
-                        new_indices = []
-                        for header in missing_headers:
-                            next_order += 1
-                            new_indices.append(
-                                AvailableIndex(
-                                    name=header,
-                                    vessel_size=vessel_size,
-                                    order=next_order,
-                                    is_active=True,
-                                )
-                            )
-                        AvailableIndex.objects.bulk_create(new_indices)
-                        for index in new_indices:
-                            name_to_index[index.name.strip().lower()] = index
-
-                    filtered_data_columns = []
-                    ignored_columns = []
-                    for col_idx, index_name in data_columns:
-                        normalized_name = index_name.strip().lower()
-                        index_obj = name_to_index.get(normalized_name)
-                        if index_obj:
-                            filtered_data_columns.append((col_idx, index_obj))
-                        else:
-                            ignored_columns.append(index_name.strip())
-
-                    if not filtered_data_columns:
-                        messages.error(request, 'None of the uploaded index columns exist in Available Indices. Upload aborted.')
-                        return redirect(reverse('admin:indices-upload'))
-
-                    row_dates = set()
-                    candidate_values = []
-                    candidate_keys = set()
-                    for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-                        if not row:
-                            continue
-                        row_date = _parse_excel_date(row[date_col_idx] if len(row) > date_col_idx else None)
-                        if not row_date:
-                            continue
-
-                        row_dates.add(row_date)
-                        for col_idx, index_obj in filtered_data_columns:
-                            raw_value = row[col_idx] if len(row) > col_idx else None
-                            if raw_value in (None, ''):
-                                continue
-                            try:
-                                numeric_value = float(raw_value)
-                            except (TypeError, ValueError):
-                                continue
-
-                            key = (index_obj.pk, row_date)
-                            if key in candidate_keys:
-                                continue
-                            candidate_keys.add(key)
-                            candidate_values.append(
-                                DailyIndexValue(
-                                    index=index_obj,
-                                    date=row_date,
-                                    value=numeric_value,
-                                )
-                            )
-
-                    existing_keys = set(
-                        DailyIndexValue.objects.filter(
-                            index__in=[idx for _, idx in filtered_data_columns],
-                            date__in=row_dates,
-                        ).values_list('index_id', 'date')
-                    ) if row_dates else set()
-
-                    values_to_create = []
-                    for daily_value in candidate_values:
-                        key = (daily_value.index_id, daily_value.date)
-                        if key not in existing_keys:
-                            values_to_create.append(daily_value)
-                            existing_keys.add(key)
-
-                    DailyIndexValue.objects.bulk_create(values_to_create, ignore_conflicts=True)
-                    insert_count = len(values_to_create)
-                    skipped_existing_count = len(candidate_values) - insert_count
-            messages.success(
-                request,
-                f'Upload completed. Inserted {insert_count} new daily values. '
-                f'Skipped {skipped_existing_count} existing values. '
-                f'Ignored {len(ignored_columns)} unknown columns.',
-            )
-            return redirect(reverse('admin:indices-upload'))
     else:
         form = IndexUploadForm()
 
@@ -394,6 +396,124 @@ def upload_indices_view(request):
         'form': form,
     }
     return render(request, 'admin/indices_upload.html', context)
+
+
+def upload_indices_verify_view(request, session_id):
+    temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+    temp_file = os.path.join(temp_dir, f'{session_id}.json')
+
+    if not os.path.exists(temp_file):
+        messages.error(request, 'Upload verification session not found or has expired.')
+        return redirect(reverse('admin:indices-upload'))
+
+    try:
+        with open(temp_file, 'r', encoding='utf-8') as f:
+            session_data = json.load(f)
+    except Exception as exc:
+        messages.error(request, f'Unable to load upload session: {exc}')
+        return redirect(reverse('admin:indices-upload'))
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'import':
+            return _save_excel_indices(request, session_data, temp_file)
+        if action == 'discard':
+            try:
+                os.remove(temp_file)
+            except OSError:
+                pass
+            messages.info(request, 'Excel upload discarded.')
+            return redirect(reverse('admin:indices-upload'))
+
+    context = {
+        **admin.site.each_context(request),
+        'title': 'Review Baltic Index Upload',
+        'session_id': session_id,
+        'file_name': session_data.get('file_name', ''),
+        'vessel_size': session_data.get('vessel_size', ''),
+        'sheet_name': session_data.get('sheet_name', ''),
+        'rows': session_data.get('rows', []),
+        'unique_indices': session_data.get('unique_indices', []),
+        'row_count': len(session_data.get('rows', [])),
+    }
+    return render(request, 'admin/indices_upload_verify.html', context)
+
+
+def _save_excel_indices(request, session_data, temp_file):
+    vessel_size = session_data.get('vessel_size', 'panamax')
+    extracted_rows = session_data.get('rows', [])
+    if not extracted_rows:
+        messages.error(request, 'No extracted rows available to import.')
+        return redirect(reverse('admin:indices-upload'))
+
+    unique_names = {row['index_name'].strip() for row in extracted_rows if row.get('index_name')}
+    existing_indices = AvailableIndex.objects.filter(name__in=unique_names)
+    index_map = {index.name.strip().lower(): index for index in existing_indices}
+
+    if unique_names:
+        max_order = AvailableIndex.objects.filter(vessel_size=vessel_size).aggregate(max_order=Max('order'))['max_order'] or 0
+    else:
+        max_order = 0
+
+    created_indices = 0
+    for index_name in sorted(unique_names):
+        normalized = index_name.strip().lower()
+        if normalized not in index_map:
+            max_order += 1
+            new_index = AvailableIndex.objects.create(
+                name=index_name.strip(),
+                vessel_size=vessel_size,
+                order=max_order,
+                is_active=True,
+            )
+            index_map[normalized] = new_index
+            created_indices += 1
+
+    row_dates = {datetime.fromisoformat(row['rate_date']).date() for row in extracted_rows}
+    existing_keys = set(
+        DailyIndexValue.objects.filter(
+            index__in=index_map.values(),
+            date__in=row_dates,
+        ).values_list('index_id', 'date')
+    )
+
+    values_to_create = []
+    skipped_count = 0
+    for row in extracted_rows:
+        index_name = row['index_name'].strip()
+        index_obj = index_map.get(index_name.lower())
+        if not index_obj:
+            continue
+
+        row_date = datetime.fromisoformat(row['rate_date']).date()
+        key = (index_obj.pk, row_date)
+        if key in existing_keys:
+            skipped_count += 1
+            continue
+
+        values_to_create.append(
+            DailyIndexValue(
+                index=index_obj,
+                date=row_date,
+                value=row['value'],
+            )
+        )
+        existing_keys.add(key)
+
+    DailyIndexValue.objects.bulk_create(values_to_create, ignore_conflicts=True)
+    inserted_count = len(values_to_create)
+
+    try:
+        os.remove(temp_file)
+    except OSError:
+        pass
+
+    messages.success(
+        request,
+        f'Imported {inserted_count} index values from {len(unique_names)} indices. '
+        f'Created {created_indices} new index definitions and skipped {skipped_count} duplicate values.'
+    )
+    return redirect(reverse('admin:indices-upload'))
 
 
 def indices_config_view(request):
@@ -465,6 +585,11 @@ _voyage_original_get_urls = admin.site.get_urls
 
 def _voyage_admin_urls():
     custom_urls = [
+        path(
+            'indices-upload/verify/<str:session_id>/',
+            admin.site.admin_view(upload_indices_verify_view),
+            name='indices-upload-verify',
+        ),
         path(
             'indices-upload/',
             admin.site.admin_view(upload_indices_view),

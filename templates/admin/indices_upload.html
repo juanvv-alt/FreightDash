@@ -3,7 +3,7 @@
 {% block content %}
 <div style="max-width: 980px;">
     <h1>Upload Baltic Indices</h1>
-    <p>Upload preset Excel format with a <strong>Date</strong> column and one or more index columns.</p>
+    <p>Upload the Baltic Excel report and validate the spot indices before saving them to the database.</p>
 
     <div style="border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin: 16px 0;">
         <form method="post" enctype="multipart/form-data">
@@ -22,7 +22,7 @@
                 <p style="margin: 6px 0 0; color: #666;">{{ form.upload_file.help_text }}</p>
                 {% endif %}
             </div>
-            <button type="submit" class="default">Upload</button>
+            <button type="submit" class="default">Upload and Review</button>
         </form>
     </div>
 
