@@ -30,6 +30,7 @@ from .calculators import (
     calculate_tce,
     calculate_freight_from_tce
 )
+from bisect import bisect_right
 
 
 logger = logging.getLogger(__name__)
@@ -436,8 +437,34 @@ def freight_matrix(request):
     if hire_index_ids and not hire_map:
         warnings.append(f'No daily hire index values found for date range {start_date} to {end_date}. Check uploaded index data.')
         logger.warning(f'Freight matrix: No hire values found for indices {hire_index_ids} in date range')
+    # Prepare a time-series cache for relevant index ids so we can fall back
+    # to the most recent available value on or before a given date.
+    needed_index_ids = set(hire_index_ids)
+    for v in voyages:
+        for line in v.fuel_splits.all():
+            if line.fuel_index_id:
+                needed_index_ids.add(line.fuel_index_id)
 
+    index_dates = {}
+    index_values = {}
+    if needed_index_ids:
+        qs = DailyIndexValue.objects.filter(index_id__in=needed_index_ids, date__lte=end_date).order_by('date')
+        for val in qs:
+            idx = val.index_id
+            index_dates.setdefault(idx, []).append(val.date)
+            index_values.setdefault(idx, []).append(val.value)
     matrix_rows = []
+    # helper to find latest value for index_id on or before date_value
+    def _latest_value(idx_id, date_value):
+        dates = index_dates.get(idx_id)
+        if not dates:
+            return None
+        # find rightmost date <= date_value
+        pos = bisect_right(dates, date_value) - 1
+        if pos < 0:
+            return None
+        return index_values[idx_id][pos]
+
     for row_date in date_rows:
         rates = {}
         for voyage in voyages:
@@ -446,9 +473,60 @@ def freight_matrix(request):
                 continue
 
             target_tce = hire_map.get((voyage.daily_hire_index_id, row_date))
+            if target_tce is None and voyage.daily_hire_index_id:
+                target_tce = _latest_value(voyage.daily_hire_index_id, row_date)
+
             blended_fuel_price = _blended_fuel_price(voyage, row_date)
+            # if blended price is missing for the exact date, try to compute
+            # using the latest available fuel index values on or before row_date
+            if blended_fuel_price is None:
+                splits = list(voyage.fuel_splits.all())
+                if splits:
+                    total_weight = 0.0
+                    total_price = 0.0
+                    for line in splits:
+                        idx_price = _latest_value(line.fuel_index_id, row_date)
+                        if idx_price is None or line.weight_pct <= 0:
+                            continue
+                        total_weight += line.weight_pct
+                        total_price += idx_price * line.weight_pct
+                    if total_weight > 0:
+                        blended_fuel_price = total_price / total_weight
             speed = _select_speed_profile(voyage)
 
+            # track whether we used fallback (earlier-date) values
+            hire_used_fallback = False
+            fuel_used_fallback = False
+
+            if (
+                target_tce is None
+                or blended_fuel_price is None
+                or not speed
+                or speed.ballast_speed <= 0
+                or speed.laden_speed <= 0
+            ):
+                # try fallbacks where possible
+                if target_tce is None and voyage.daily_hire_index_id:
+                    target_tce = _latest_value(voyage.daily_hire_index_id, row_date)
+                    if target_tce is not None:
+                        hire_used_fallback = True
+
+                if blended_fuel_price is None:
+                    splits = list(voyage.fuel_splits.all())
+                    if splits:
+                        total_weight = 0.0
+                        total_price = 0.0
+                        for line in splits:
+                            idx_price = _latest_value(line.fuel_index_id, row_date)
+                            if idx_price is None or line.weight_pct <= 0:
+                                continue
+                            total_weight += line.weight_pct
+                            total_price += idx_price * line.weight_pct
+                        if total_weight > 0:
+                            blended_fuel_price = total_price / total_weight
+                            fuel_used_fallback = True
+
+            # if still missing critical inputs, skip
             if (
                 target_tce is None
                 or blended_fuel_price is None
@@ -496,7 +574,10 @@ def freight_matrix(request):
                 continue
 
             freight_rate = ((target_tce * voyage_days) + total_port_expenses + (fuel_mt * blended_fuel_price)) / denominator
-            rates[voyage.name] = round(freight_rate, 2)
+            rates[voyage.name] = {
+                'value': round(freight_rate, 2),
+                'asterisk': bool(hire_used_fallback or fuel_used_fallback),
+            }
 
         matrix_rows.append({'date': row_date, 'rates': rates})
 

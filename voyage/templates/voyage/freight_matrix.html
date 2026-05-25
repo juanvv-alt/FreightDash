@@ -113,8 +113,8 @@
                     {% for voyage in voyages %}
                     <td>
                         {% with voyage_rate=row.rates|get_item:voyage.name %}
-                        {% if voyage_rate or voyage_rate == 0 %}
-                            {{ voyage_rate }}
+                        {% if voyage_rate %}
+                            {{ voyage_rate.value }}{% if voyage_rate.asterisk %}*{% endif %}
                         {% else %}
                             -
                         {% endif %}
