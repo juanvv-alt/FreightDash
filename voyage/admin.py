@@ -287,6 +287,14 @@ def upload_indices_view(request):
                     'rate description', 'index', 'name', 'rate', 'curve', 'curve name', 'rate index'
                 ]
 
+                # detect explicit RateCode column if present
+                rate_code_col_idx = None
+                for idx, header in enumerate(normalized_headers):
+                    lh = header.lower()
+                    if lh in ['ratecode', 'rate code', 'rate_id', 'rate id', 'code']:
+                        rate_code_col_idx = idx
+                        break
+
                 for idx, header in enumerate(normalized_headers):
                     lower_header = header.lower()
                     if lower_header in ['ratedate', 'rate date', 'date']:
@@ -343,12 +351,15 @@ def upload_indices_view(request):
 
                     raw_index_name = row[index_name_col_idx] if len(row) > index_name_col_idx else None
                     index_name = str(raw_index_name).strip() if raw_index_name is not None else ''
+                    raw_rate_code = row[rate_code_col_idx] if rate_code_col_idx is not None and len(row) > rate_code_col_idx else None
+                    rate_code = str(raw_rate_code).strip() if raw_rate_code is not None else ''
                     if not index_name:
                         continue
 
                     unique_indices.add(index_name)
                     extracted_rows.append({
                         'index_name': index_name,
+                        'rate_code': rate_code,
                         'rate_date': parsed_date.isoformat(),
                         'rate_date_text': parsed_date.strftime('%Y-%m-%d'),
                         'value': numeric_value,
@@ -365,6 +376,7 @@ def upload_indices_view(request):
                 temp_file = os.path.join(temp_dir, f'{session_id}.json')
 
                 session_data = {
+                    'session_id': session_id,
                     'file_name': upload_file.name,
                     'vessel_size': vessel_size,
                     'sheet_name': sheet.title,
@@ -425,6 +437,14 @@ def upload_indices_verify_view(request, session_id):
             messages.info(request, 'Excel upload discarded.')
             return redirect(reverse('admin:indices-upload'))
 
+    # Prepare existing indices for the vessel to allow verification of RateCode
+    vessel_size = session_data.get('vessel_size', '')
+    existing_index_qs = AvailableIndex.objects.filter(vessel_size=vessel_size, is_active=True)
+    existing_index_names_lower = set(name.strip().lower() for name in existing_index_qs.values_list('name', flat=True))
+    # find any indices present in upload that are not in DB
+    uploaded_unique = set([n.strip().lower() for n in session_data.get('unique_indices', []) if n])
+    missing_indices = sorted([n for n in uploaded_unique if n not in existing_index_names_lower])
+
     context = {
         **admin.site.each_context(request),
         'title': 'Review Baltic Index Upload',
@@ -435,6 +455,8 @@ def upload_indices_verify_view(request, session_id):
         'rows': session_data.get('rows', []),
         'unique_indices': session_data.get('unique_indices', []),
         'row_count': len(session_data.get('rows', [])),
+        'existing_indices_lower': existing_index_names_lower,
+        'missing_indices': missing_indices,
     }
     return render(request, 'admin/indices_upload_verify.html', context)
 
@@ -450,24 +472,17 @@ def _save_excel_indices(request, session_data, temp_file):
     existing_indices = AvailableIndex.objects.filter(name__in=unique_names)
     index_map = {index.name.strip().lower(): index for index in existing_indices}
 
-    if unique_names:
-        max_order = AvailableIndex.objects.filter(vessel_size=vessel_size).aggregate(max_order=Max('order'))['max_order'] or 0
-    else:
-        max_order = 0
-
-    created_indices = 0
-    for index_name in sorted(unique_names):
-        normalized = index_name.strip().lower()
-        if normalized not in index_map:
-            max_order += 1
-            new_index = AvailableIndex.objects.create(
-                name=index_name.strip(),
-                vessel_size=vessel_size,
-                order=max_order,
-                is_active=True,
-            )
-            index_map[normalized] = new_index
-            created_indices += 1
+    # Do NOT create new AvailableIndex entries automatically here.
+    # If the upload contains indices not present in the DB, abort and ask admin to add them first.
+    missing = sorted([n for n in unique_names if n.strip().lower() not in index_map])
+    if missing:
+        messages.error(
+            request,
+            'Import aborted. The uploaded file contains indices not present in Available Indices: ' + ', '.join(missing)
+            + '. Add them via Available Indices and re-run the upload/verification.'
+        )
+        # Redirect back to verify page so admin can see missing list
+        return redirect(reverse('admin:indices-upload-verify', args=[session_data.get('session_id') or '']))
 
     row_dates = {datetime.fromisoformat(row['rate_date']).date() for row in extracted_rows}
     existing_keys = set(
@@ -511,7 +526,7 @@ def _save_excel_indices(request, session_data, temp_file):
     messages.success(
         request,
         f'Imported {inserted_count} index values from {len(unique_names)} indices. '
-        f'Created {created_indices} new index definitions and skipped {skipped_count} duplicate values.'
+        f'Skipped {skipped_count} duplicate values.'
     )
     return redirect(reverse('admin:indices-upload'))
 

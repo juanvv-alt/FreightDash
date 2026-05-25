@@ -29,28 +29,50 @@
     </div>
 
     <div style="margin-bottom: 32px;">
+        {% if missing_indices %}
+        <div style="padding:12px; border:1px solid #f5c6cb; background:#f8d7da; border-radius:6px; margin-bottom:12px;">
+            <strong>Missing indices detected:</strong>
+            <div style="margin-top:8px;">The following indices in the uploaded file do not exist in Available Indices for vessel <em>{{ vessel_size }}</em>:</div>
+            <ul>
+                {% for mi in missing_indices %}
+                <li>{{ mi }}</li>
+                {% endfor %}
+            </ul>
+            <div style="margin-top:8px; color:#721c24;">Please add these indices in <a href="{% url 'admin:voyage_availableindex_changelist' %}">Available Indices</a> or update the source file and re-upload. Import is disabled until missing indices are added.</div>
+        </div>
+        {% endif %}
         <h2>Sample values</h2>
         <div style="overflow-x: auto; border: 1px solid #ddd; border-radius: 6px;">
             <table style="width: 100%; border-collapse: collapse;">
                 <thead>
                     <tr style="background: #f4f4f4;">
                         <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Index Name</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">RateCode</th>
                         <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">RateDate</th>
                         <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Value</th>
                         <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">RatePeriodDescription</th>
+                        <th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Match</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in rows|slice:":100" %}
                         <tr>
-                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.index_name }}</td>
-                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.rate_date_text }}</td>
-                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.value }}</td>
-                            <td style="border: 1px solid #ddd; padding: 10px;">{{ row.original_period }}</td>
-                        </tr>
+                                <td style="border: 1px solid #ddd; padding: 10px;">{{ row.index_name }}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px;">{{ row.rate_code }}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px;">{{ row.rate_date_text }}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px;">{{ row.value }}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px;">{{ row.original_period }}</td>
+                                <td style="border: 1px solid #ddd; padding: 10px;">
+                                    {% if row.rate_code|default:''|lower in existing_indices_lower %}
+                                    <span style="color: #155724; background: #d4edda; padding: 4px 8px; border-radius:4px;">Matched</span>
+                                    {% else %}
+                                    <span style="color: #856404; background: #fff3cd; padding: 4px 8px; border-radius:4px;">No match</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="4" style="border: 1px solid #ddd; padding: 10px; text-align: center;">No rows found.</td>
+                            <td colspan="6" style="border: 1px solid #ddd; padding: 10px; text-align: center;">No rows found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -64,7 +86,11 @@
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="session_id" value="{{ session_id }}">
+        {% if missing_indices %}
+        <button type="button" class="default" disabled style="margin-right: 12px; opacity:0.6;">Import values (disabled)</button>
+        {% else %}
         <button type="submit" name="action" value="import" class="default" style="margin-right: 12px;">Import values</button>
+        {% endif %}
         <button type="submit" name="action" value="discard" class="deletelink">Discard</button>
     </form>
 </div>
