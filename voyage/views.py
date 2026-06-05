@@ -1361,7 +1361,7 @@ def vessel_compare(request):
         form_vessels = []
         for j in range(len(vessel_names)):
             form_vessels.append({
-                'name': request.POST.get(f'vessel_{j}_name', ''),
+                'name': vessel_names[j],
                 'intake_v0': request.POST.get(f'vessel_{j}_intake_v0', ''),
                 'intake_v1': request.POST.get(f'vessel_{j}_intake_v1', ''),
                 'laden_speed': request.POST.get(f'vessel_{j}_laden_speed', ''),
