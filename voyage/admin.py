@@ -61,11 +61,8 @@ class RouteParametersAdmin(admin.ModelAdmin):
         ('Commission & Margins', {
             'fields': ('freight_commission_pct', 'sea_margin_pct'),
         }),
-        ('Speed Parameters', {
-            'fields': ('ballast_speed', 'laden_speed'),
-        }),
-        ('Consumption Parameters', {
-            'fields': ('ballast_consumption', 'laden_consumption', 'port_consumption'),
+        ('Port Consumption', {
+            'fields': ('port_consumption',),
         }),
     )
     readonly_fields = ('created_at', 'updated_at')
