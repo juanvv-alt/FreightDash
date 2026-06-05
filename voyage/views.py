@@ -1374,12 +1374,29 @@ def vessel_compare(request):
         form_global = DEFAULT_GLOBAL
         form_voyages = DEFAULT_VOYAGES
         form_vessels = [
-            {
-                'name': 'BKI',
-                'intake_v0': 79000, 'intake_v1': 69500,
-                'laden_speed': 11.5, 'ballast_speed': 12.5,
-                'laden_cons': 22, 'ballast_cons': 23, 'port_cons': 4.5,
-            }
+            {'name': 'BKI',            'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11.5, 'ballast_speed': 12.5,  'laden_cons': 22,   'ballast_cons': 23,   'port_cons': 4.5},
+            {'name': 'Yangze 22',      'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 22,   'ballast_cons': 18.5, 'port_cons': 5},
+            {'name': 'AQUASALWADOR',   'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12.25,'ballast_speed': 13.25, 'laden_cons': 22.8, 'ballast_cons': 22.8, 'port_cons': 5.6},
+            {'name': 'ZAKYNTHOS',      'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11,   'ballast_speed': 12,    'laden_cons': 18,   'ballast_cons': 16.5, 'port_cons': 4},
+            {'name': 'SEACON HAMBURG', 'intake_v0': 81000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 21.5, 'ballast_cons': 20,   'port_cons': 5.5},
+            {'name': 'Xing Huan Hai',  'intake_v0': 81000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 22.5, 'ballast_cons': 20.5, 'port_cons': 4.5},
+            {'name': 'Lestari Tbn',    'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 22,   'ballast_cons': 16.5, 'port_cons': 4.2},
+            {'name': 'XING HUAN HAI',  'intake_v0': 82500, 'intake_v1': 72000, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 22.5, 'ballast_cons': 20.5, 'port_cons': 5.5},
+            {'name': 'Orient Point',   'intake_v0': 80000, 'intake_v1': 69500, 'laden_speed': 11,   'ballast_speed': 12,    'laden_cons': 17.2, 'ballast_cons': 15.7, 'port_cons': 4.7},
+            {'name': 'RB Jordana',     'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 21.4, 'ballast_cons': 18.2, 'port_cons': 4},
+            {'name': 'BH ASSEMBLE',    'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 25.5, 'ballast_cons': 23,   'port_cons': 5},
+            {'name': 'golden wave',    'intake_v0': 82500, 'intake_v1': 72000, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 22.5, 'ballast_cons': 20.5, 'port_cons': 5},
+            {'name': 'SEACON HAMBURG 2','intake_v0': 82500, 'intake_v1': 69500, 'laden_speed': 12,  'ballast_speed': 12.5,  'laden_cons': 21.5, 'ballast_cons': 20,   'port_cons': 5},
+            {'name': 'light venture',  'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 24.9, 'ballast_cons': 18.9, 'port_cons': 4},
+            {'name': 'ASL Galaxy',     'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 24,   'ballast_cons': 22,   'port_cons': 4.3},
+            {'name': 'Yangze 18',      'intake_v0': 79000, 'intake_v1': 69501, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 24.5, 'ballast_cons': 21.5, 'port_cons': 4.5},
+            {'name': 'SHINE PEARL',    'intake_v0': 80000, 'intake_v1': 69900, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 20.5, 'ballast_cons': 17.5, 'port_cons': 3.5},
+            {'name': 'Amori',          'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 24,   'ballast_cons': 23,   'port_cons': 4},
+            {'name': 'Pan Flower',     'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11.5, 'ballast_speed': 12.75, 'laden_cons': 25,   'ballast_cons': 25,   'port_cons': 4},
+            {'name': 'VSC POSEIDON',   'intake_v0': 73000, 'intake_v1': 65000, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 23.5, 'ballast_cons': 19.5, 'port_cons': 3.5},
+            {'name': 'Bbg Yongjiang',  'intake_v0': 80000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 19.5, 'ballast_cons': 19.5, 'port_cons': 4},
+            {'name': 'DL Acacia',      'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11.5, 'ballast_speed': 12.5,  'laden_cons': 26,   'ballast_cons': 26,   'port_cons': 4.5},
+            {'name': 'America',        'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 20,   'ballast_cons': 20,   'port_cons': 3},
         ]
 
     context = {
