@@ -281,3 +281,67 @@ class VoyageFuelSplit(models.Model):
 
     def __str__(self):
         return f"{self.voyage.name} - {self.fuel_index.name} ({self.weight_pct}%)"
+
+
+class VesselCompareConfig(models.Model):
+    """Singleton storing market inputs and voyage parameters for the vessel comparison tool."""
+    hire = models.FloatField(default=23000)
+    ifo_price = models.FloatField(default=800)
+    mgo_price = models.FloatField(default=1300)
+    weather_factor = models.FloatField(default=1.07)
+
+    v1_name = models.CharField(max_length=160, default='Abbot Point to VN')
+    v1_ballast_dist = models.FloatField(default=3734)
+    v1_laden_dist = models.FloatField(default=4023)
+    v1_load_rate = models.FloatField(default=35000)
+    v1_dis_rate = models.FloatField(default=8000)
+    v1_load_factor = models.FloatField(default=1.0)
+    v1_dis_factor = models.FloatField(default=1.0)
+    v1_turntimes = models.FloatField(default=36)
+    v1_port_exp = models.FloatField(default=165000)
+    v1_various_exp = models.FloatField(default=10000)
+
+    v2_name = models.CharField(max_length=160, default='Santos to Qingdao')
+    v2_ballast_dist = models.FloatField(default=8975)
+    v2_laden_dist = models.FloatField(default=11443)
+    v2_load_rate = models.FloatField(default=8000)
+    v2_dis_rate = models.FloatField(default=8000)
+    v2_load_factor = models.FloatField(default=1.35)
+    v2_dis_factor = models.FloatField(default=1.5)
+    v2_turntimes = models.FloatField(default=36)
+    v2_port_exp = models.FloatField(default=160000)
+    v2_various_exp = models.FloatField(default=10000)
+
+    class Meta:
+        verbose_name = 'Vessel Compare Config'
+
+    def __str__(self):
+        return 'Vessel Compare Config'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class ComparisonVessel(models.Model):
+    """A vessel entry in the vessel comparison tool."""
+    name = models.CharField(max_length=120)
+    order = models.PositiveIntegerField(default=0)
+    is_standard = models.BooleanField(default=False, help_text='BKI reference vessel')
+    intake_v1 = models.FloatField(default=79000)
+    intake_v2 = models.FloatField(default=69500)
+    laden_speed = models.FloatField(default=12.0)
+    ballast_speed = models.FloatField(default=12.5)
+    laden_cons = models.FloatField(default=22.0)
+    ballast_cons = models.FloatField(default=23.0)
+    port_cons = models.FloatField(default=4.5)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'created_at']
+        verbose_name = 'Comparison Vessel'
+        verbose_name_plural = 'Comparison Vessels'
+
+    def __str__(self):
+        return self.name

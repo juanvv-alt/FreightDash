@@ -1238,171 +1238,131 @@ def _save_selected_indices(request, session_data, temp_file):
 
 
 def vessel_compare(request):
-    DEFAULT_VOYAGES = [
-        {
-            'name': 'Abbot Point to VN',
-            'ballast_dist': 3734, 'laden_dist': 4023,
-            'load_rate': 35000, 'dis_rate': 8000,
-            'load_factor': 1.0, 'dis_factor': 1.0,
-            'turntimes_hours': 36,
-            'port_exp': 165000, 'various_exp': 10000,
-            'bki_intake': 79000,
-        },
-        {
-            'name': 'Santos to Qingdao',
-            'ballast_dist': 8975, 'laden_dist': 11443,
-            'load_rate': 8000, 'dis_rate': 8000,
-            'load_factor': 1.35, 'dis_factor': 1.5,
-            'turntimes_hours': 36,
-            'port_exp': 160000, 'various_exp': 10000,
-            'bki_intake': 69500,
-        },
-    ]
+    from .models import ComparisonVessel, VesselCompareConfig
 
-    DEFAULT_GLOBAL = {
-        'hire': 23000,
-        'ifo_price': 800,
-        'mgo_price': 1300,
-        'weather_factor': 1.07,
-    }
+    def _f(val, default=0.0):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return float(default)
 
-    results = None
-    error = None
+    def _run_calc(cfg, vessels_qs):
+        voyages = [
+            {'name': cfg.v1_name, 'ballast_dist': cfg.v1_ballast_dist, 'laden_dist': cfg.v1_laden_dist,
+             'load_rate': cfg.v1_load_rate, 'dis_rate': cfg.v1_dis_rate, 'load_factor': cfg.v1_load_factor,
+             'dis_factor': cfg.v1_dis_factor, 'turntimes_hours': cfg.v1_turntimes,
+             'port_exp': cfg.v1_port_exp, 'various_exp': cfg.v1_various_exp},
+            {'name': cfg.v2_name, 'ballast_dist': cfg.v2_ballast_dist, 'laden_dist': cfg.v2_laden_dist,
+             'load_rate': cfg.v2_load_rate, 'dis_rate': cfg.v2_dis_rate, 'load_factor': cfg.v2_load_factor,
+             'dis_factor': cfg.v2_dis_factor, 'turntimes_hours': cfg.v2_turntimes,
+             'port_exp': cfg.v2_port_exp, 'various_exp': cfg.v2_various_exp},
+        ]
+        vessels = [
+            {'name': v.name, 'intakes': [v.intake_v1, v.intake_v2],
+             'laden_speed': v.laden_speed, 'ballast_speed': v.ballast_speed,
+             'laden_cons': v.laden_cons, 'ballast_cons': v.ballast_cons, 'port_cons': v.port_cons}
+            for v in vessels_qs
+        ]
+        global_inputs = {'hire': cfg.hire, 'ifo_price': cfg.ifo_price,
+                         'mgo_price': cfg.mgo_price, 'weather_factor': cfg.weather_factor}
+        r = calculate_vessel_comparison(global_inputs, voyages, vessels)
+        r['vessel_summary'] = [
+            {'name': name, 'wa': wa,
+             'pct': wa * 100 if wa is not None else None,
+             'pct_delta': (wa - 1) * 100 if wa is not None else None}
+            for name, wa in zip(r['vessels'], r['weighted_avgs'])
+        ]
+        return r
+
+    cfg = VesselCompareConfig.get()
 
     if request.method == 'POST':
+        action = request.POST.get('action', '')
+
+        if action == 'update_config':
+            cfg.hire = _f(request.POST.get('hire'), cfg.hire)
+            cfg.ifo_price = _f(request.POST.get('ifo_price'), cfg.ifo_price)
+            cfg.mgo_price = _f(request.POST.get('mgo_price'), cfg.mgo_price)
+            cfg.weather_factor = _f(request.POST.get('weather_factor'), cfg.weather_factor)
+            cfg.v1_name = request.POST.get('v1_name', cfg.v1_name)
+            cfg.v1_ballast_dist = _f(request.POST.get('v1_ballast_dist'), cfg.v1_ballast_dist)
+            cfg.v1_laden_dist = _f(request.POST.get('v1_laden_dist'), cfg.v1_laden_dist)
+            cfg.v1_load_rate = _f(request.POST.get('v1_load_rate'), cfg.v1_load_rate)
+            cfg.v1_dis_rate = _f(request.POST.get('v1_dis_rate'), cfg.v1_dis_rate)
+            cfg.v1_load_factor = _f(request.POST.get('v1_load_factor'), cfg.v1_load_factor)
+            cfg.v1_dis_factor = _f(request.POST.get('v1_dis_factor'), cfg.v1_dis_factor)
+            cfg.v1_turntimes = _f(request.POST.get('v1_turntimes'), cfg.v1_turntimes)
+            cfg.v1_port_exp = _f(request.POST.get('v1_port_exp'), cfg.v1_port_exp)
+            cfg.v1_various_exp = _f(request.POST.get('v1_various_exp'), cfg.v1_various_exp)
+            cfg.v2_name = request.POST.get('v2_name', cfg.v2_name)
+            cfg.v2_ballast_dist = _f(request.POST.get('v2_ballast_dist'), cfg.v2_ballast_dist)
+            cfg.v2_laden_dist = _f(request.POST.get('v2_laden_dist'), cfg.v2_laden_dist)
+            cfg.v2_load_rate = _f(request.POST.get('v2_load_rate'), cfg.v2_load_rate)
+            cfg.v2_dis_rate = _f(request.POST.get('v2_dis_rate'), cfg.v2_dis_rate)
+            cfg.v2_load_factor = _f(request.POST.get('v2_load_factor'), cfg.v2_load_factor)
+            cfg.v2_dis_factor = _f(request.POST.get('v2_dis_factor'), cfg.v2_dis_factor)
+            cfg.v2_turntimes = _f(request.POST.get('v2_turntimes'), cfg.v2_turntimes)
+            cfg.v2_port_exp = _f(request.POST.get('v2_port_exp'), cfg.v2_port_exp)
+            cfg.v2_various_exp = _f(request.POST.get('v2_various_exp'), cfg.v2_various_exp)
+            cfg.save()
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'add_vessel':
+            name = request.POST.get('new_name', '').strip()
+            if name:
+                next_order = ComparisonVessel.objects.count()
+                ComparisonVessel.objects.create(
+                    name=name, order=next_order,
+                    intake_v1=_f(request.POST.get('new_intake_v1'), 79000),
+                    intake_v2=_f(request.POST.get('new_intake_v2'), 69500),
+                    laden_speed=_f(request.POST.get('new_laden_speed'), 12),
+                    ballast_speed=_f(request.POST.get('new_ballast_speed'), 12.5),
+                    laden_cons=_f(request.POST.get('new_laden_cons'), 22),
+                    ballast_cons=_f(request.POST.get('new_ballast_cons'), 23),
+                    port_cons=_f(request.POST.get('new_port_cons'), 4.5),
+                )
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'edit_vessel':
+            vid = request.POST.get('vessel_id')
+            try:
+                v = ComparisonVessel.objects.get(pk=int(vid))
+                v.name = request.POST.get('edit_name', v.name).strip() or v.name
+                v.intake_v1 = _f(request.POST.get('edit_intake_v1'), v.intake_v1)
+                v.intake_v2 = _f(request.POST.get('edit_intake_v2'), v.intake_v2)
+                v.laden_speed = _f(request.POST.get('edit_laden_speed'), v.laden_speed)
+                v.ballast_speed = _f(request.POST.get('edit_ballast_speed'), v.ballast_speed)
+                v.laden_cons = _f(request.POST.get('edit_laden_cons'), v.laden_cons)
+                v.ballast_cons = _f(request.POST.get('edit_ballast_cons'), v.ballast_cons)
+                v.port_cons = _f(request.POST.get('edit_port_cons'), v.port_cons)
+                v.save()
+            except (ComparisonVessel.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'delete_vessel':
+            vid = request.POST.get('vessel_id')
+            try:
+                v = ComparisonVessel.objects.get(pk=int(vid))
+                if not v.is_standard:
+                    v.delete()
+            except (ComparisonVessel.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+    vessels_qs = ComparisonVessel.objects.all()
+    results = None
+    error = None
+    if vessels_qs.exists():
         try:
-            def _f(key, default=0.0):
-                v = request.POST.get(key, '')
-                try:
-                    return float(v)
-                except (ValueError, TypeError):
-                    return float(default)
-
-            global_inputs = {
-                'hire': _f('hire'),
-                'ifo_price': _f('ifo_price'),
-                'mgo_price': _f('mgo_price'),
-                'weather_factor': _f('weather_factor', 1.07),
-            }
-
-            voyages = []
-            for i in range(2):
-                voyages.append({
-                    'name': request.POST.get(f'v{i}_name', f'Voyage {i+1}'),
-                    'ballast_dist': _f(f'v{i}_ballast_dist'),
-                    'laden_dist': _f(f'v{i}_laden_dist'),
-                    'load_rate': _f(f'v{i}_load_rate'),
-                    'dis_rate': _f(f'v{i}_dis_rate'),
-                    'load_factor': _f(f'v{i}_load_factor', 1.0),
-                    'dis_factor': _f(f'v{i}_dis_factor', 1.0),
-                    'turntimes_hours': _f(f'v{i}_turntimes'),
-                    'port_exp': _f(f'v{i}_port_exp'),
-                    'various_exp': _f(f'v{i}_various_exp'),
-                })
-
-            vessel_names = request.POST.getlist('vessel_name')
-            vessel_count = len(vessel_names)
-
-            vessels = []
-            for j in range(vessel_count):
-                intakes = [_f(f'vessel_{j}_intake_v{i}') for i in range(2)]
-                vessels.append({
-                    'name': vessel_names[j] or f'Vessel {j+1}',
-                    'intakes': intakes,
-                    'laden_speed': _f(f'vessel_{j}_laden_speed'),
-                    'ballast_speed': _f(f'vessel_{j}_ballast_speed'),
-                    'laden_cons': _f(f'vessel_{j}_laden_cons'),
-                    'ballast_cons': _f(f'vessel_{j}_ballast_cons'),
-                    'port_cons': _f(f'vessel_{j}_port_cons'),
-                })
-
-            if not vessels:
-                error = 'Please add at least one vessel (BKI standard).'
-            else:
-                results = calculate_vessel_comparison(global_inputs, voyages, vessels)
-                results['global_inputs'] = global_inputs
-                results['voyages_input'] = voyages
-                results['vessel_summary'] = [
-                    {
-                        'name': name,
-                        'wa': wa,
-                        'pct_delta': (wa - 1) * 100 if wa is not None else None,
-                    }
-                    for name, wa in zip(results['vessels'], results['weighted_avgs'])
-                ]
-
+            results = _run_calc(cfg, vessels_qs)
         except Exception as exc:
-            logger.exception("Error in vessel_compare")
+            logger.exception("Error in vessel_compare calculation")
             error = str(exc)
 
-        form_voyages = []
-        for i in range(2):
-            form_voyages.append({
-                'name': request.POST.get(f'v{i}_name', DEFAULT_VOYAGES[i]['name']),
-                'ballast_dist': request.POST.get(f'v{i}_ballast_dist', DEFAULT_VOYAGES[i]['ballast_dist']),
-                'laden_dist': request.POST.get(f'v{i}_laden_dist', DEFAULT_VOYAGES[i]['laden_dist']),
-                'load_rate': request.POST.get(f'v{i}_load_rate', DEFAULT_VOYAGES[i]['load_rate']),
-                'dis_rate': request.POST.get(f'v{i}_dis_rate', DEFAULT_VOYAGES[i]['dis_rate']),
-                'load_factor': request.POST.get(f'v{i}_load_factor', DEFAULT_VOYAGES[i]['load_factor']),
-                'dis_factor': request.POST.get(f'v{i}_dis_factor', DEFAULT_VOYAGES[i]['dis_factor']),
-                'turntimes_hours': request.POST.get(f'v{i}_turntimes', DEFAULT_VOYAGES[i]['turntimes_hours']),
-                'port_exp': request.POST.get(f'v{i}_port_exp', DEFAULT_VOYAGES[i]['port_exp']),
-                'various_exp': request.POST.get(f'v{i}_various_exp', DEFAULT_VOYAGES[i]['various_exp']),
-                'bki_intake': request.POST.get(f'v{i}_bki_intake', DEFAULT_VOYAGES[i]['bki_intake']),
-            })
-        form_global = {
-            'hire': request.POST.get('hire', DEFAULT_GLOBAL['hire']),
-            'ifo_price': request.POST.get('ifo_price', DEFAULT_GLOBAL['ifo_price']),
-            'mgo_price': request.POST.get('mgo_price', DEFAULT_GLOBAL['mgo_price']),
-            'weather_factor': request.POST.get('weather_factor', DEFAULT_GLOBAL['weather_factor']),
-        }
-
-        vessel_names = request.POST.getlist('vessel_name')
-        form_vessels = []
-        for j in range(len(vessel_names)):
-            form_vessels.append({
-                'name': vessel_names[j],
-                'intake_v0': request.POST.get(f'vessel_{j}_intake_v0', ''),
-                'intake_v1': request.POST.get(f'vessel_{j}_intake_v1', ''),
-                'laden_speed': request.POST.get(f'vessel_{j}_laden_speed', ''),
-                'ballast_speed': request.POST.get(f'vessel_{j}_ballast_speed', ''),
-                'laden_cons': request.POST.get(f'vessel_{j}_laden_cons', ''),
-                'ballast_cons': request.POST.get(f'vessel_{j}_ballast_cons', ''),
-                'port_cons': request.POST.get(f'vessel_{j}_port_cons', ''),
-            })
-    else:
-        form_global = DEFAULT_GLOBAL
-        form_voyages = DEFAULT_VOYAGES
-        form_vessels = [
-            {'name': 'BKI',            'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11.5, 'ballast_speed': 12.5,  'laden_cons': 22,   'ballast_cons': 23,   'port_cons': 4.5},
-            {'name': 'Yangze 22',      'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 22,   'ballast_cons': 18.5, 'port_cons': 5},
-            {'name': 'AQUASALWADOR',   'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12.25,'ballast_speed': 13.25, 'laden_cons': 22.8, 'ballast_cons': 22.8, 'port_cons': 5.6},
-            {'name': 'ZAKYNTHOS',      'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11,   'ballast_speed': 12,    'laden_cons': 18,   'ballast_cons': 16.5, 'port_cons': 4},
-            {'name': 'SEACON HAMBURG', 'intake_v0': 81000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 21.5, 'ballast_cons': 20,   'port_cons': 5.5},
-            {'name': 'Xing Huan Hai',  'intake_v0': 81000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 22.5, 'ballast_cons': 20.5, 'port_cons': 4.5},
-            {'name': 'Lestari Tbn',    'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 22,   'ballast_cons': 16.5, 'port_cons': 4.2},
-            {'name': 'XING HUAN HAI',  'intake_v0': 82500, 'intake_v1': 72000, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 22.5, 'ballast_cons': 20.5, 'port_cons': 5.5},
-            {'name': 'Orient Point',   'intake_v0': 80000, 'intake_v1': 69500, 'laden_speed': 11,   'ballast_speed': 12,    'laden_cons': 17.2, 'ballast_cons': 15.7, 'port_cons': 4.7},
-            {'name': 'RB Jordana',     'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 21.4, 'ballast_cons': 18.2, 'port_cons': 4},
-            {'name': 'BH ASSEMBLE',    'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 25.5, 'ballast_cons': 23,   'port_cons': 5},
-            {'name': 'golden wave',    'intake_v0': 82500, 'intake_v1': 72000, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 22.5, 'ballast_cons': 20.5, 'port_cons': 5},
-            {'name': 'SEACON HAMBURG 2','intake_v0': 82500, 'intake_v1': 69500, 'laden_speed': 12,  'ballast_speed': 12.5,  'laden_cons': 21.5, 'ballast_cons': 20,   'port_cons': 5},
-            {'name': 'light venture',  'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 24.9, 'ballast_cons': 18.9, 'port_cons': 4},
-            {'name': 'ASL Galaxy',     'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 24,   'ballast_cons': 22,   'port_cons': 4.3},
-            {'name': 'Yangze 18',      'intake_v0': 79000, 'intake_v1': 69501, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 24.5, 'ballast_cons': 21.5, 'port_cons': 4.5},
-            {'name': 'SHINE PEARL',    'intake_v0': 80000, 'intake_v1': 69900, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 20.5, 'ballast_cons': 17.5, 'port_cons': 3.5},
-            {'name': 'Amori',          'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 12.5,  'laden_cons': 24,   'ballast_cons': 23,   'port_cons': 4},
-            {'name': 'Pan Flower',     'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11.5, 'ballast_speed': 12.75, 'laden_cons': 25,   'ballast_cons': 25,   'port_cons': 4},
-            {'name': 'VSC POSEIDON',   'intake_v0': 73000, 'intake_v1': 65000, 'laden_speed': 12,   'ballast_speed': 12,    'laden_cons': 23.5, 'ballast_cons': 19.5, 'port_cons': 3.5},
-            {'name': 'Bbg Yongjiang',  'intake_v0': 80000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 19.5, 'ballast_cons': 19.5, 'port_cons': 4},
-            {'name': 'DL Acacia',      'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 11.5, 'ballast_speed': 12.5,  'laden_cons': 26,   'ballast_cons': 26,   'port_cons': 4.5},
-            {'name': 'America',        'intake_v0': 79000, 'intake_v1': 69500, 'laden_speed': 12,   'ballast_speed': 13,    'laden_cons': 20,   'ballast_cons': 20,   'port_cons': 3},
-        ]
-
     context = {
-        'form_global': form_global,
-        'form_voyages': form_voyages,
-        'form_vessels': form_vessels,
+        'cfg': cfg,
+        'vessels': vessels_qs,
         'results': results,
         'error': error,
     }
