@@ -1322,7 +1322,11 @@ def upload_excel_indices(request):
 
 
 def upload_batch_indices(request):
-    """Upload a historical columnar indices .xlsx (Date column + one column per index)."""
+    """Upload a historical columnar indices .xlsx (Date column + one column per index).
+
+    Only reads the header row during the upload request — the full file is saved to
+    disk and processed during the confirm step to avoid request timeouts on large files.
+    """
     VESSEL_CHOICES = [
         ('panamax', 'Panamax'),
         ('capesize', 'Capesize'),
@@ -1342,76 +1346,48 @@ def upload_batch_indices(request):
             messages.error(request, 'Please select an .xlsx file.')
             return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
 
+        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+        os.makedirs(temp_dir, exist_ok=True)
+        session_id = str(uuid.uuid4())
+
+        # Save the raw file to disk — avoid loading all rows in the web request
+        xlsx_path = os.path.join(temp_dir, f'{session_id}.xlsx')
+        with open(xlsx_path, 'wb') as fh:
+            for chunk in upload_file.chunks():
+                fh.write(chunk)
+
+        # Read only the header row to get column names
         try:
-            wb = openpyxl.load_workbook(upload_file, read_only=True, data_only=True)
+            wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
         except Exception as exc:
+            os.remove(xlsx_path)
             messages.error(request, f'Could not open file: {exc}')
             return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
 
         ws = wb.active
-        all_rows = list(ws.iter_rows(min_row=1, values_only=True))
-        if not all_rows:
-            messages.error(request, 'File appears to be empty.')
-            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+        header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        wb.close()
 
-        header = all_rows[0]
         if not header or str(header[0]).strip().lower() != 'date':
+            os.remove(xlsx_path)
             messages.error(request, 'Expected first column to be "Date". Check the file format.')
             return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
 
-        # index_cols: list of (col_index, index_name)
-        index_cols = []
-        for i, cell in enumerate(header[1:], start=1):
-            if cell is not None and str(cell).strip():
-                index_cols.append((i, str(cell).strip()))
-
-        if not index_cols:
+        columns = [str(c).strip() for c in header[1:] if c is not None and str(c).strip()]
+        if not columns:
+            os.remove(xlsx_path)
             messages.error(request, 'No index columns found in header row.')
             return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
 
-        spot_rows = []
-        skipped = 0
-        for row in all_rows[1:]:
-            if not row or row[0] is None:
-                continue
-            date_val = row[0]
-            if isinstance(date_val, datetime):
-                row_date = date_val.date()
-            else:
-                row_date = _parse_date(str(date_val))
-            if not row_date:
-                skipped += 1
-                continue
-            for col_idx, name in index_cols:
-                if col_idx >= len(row):
-                    continue
-                val = row[col_idx]
-                if val is None:
-                    continue
-                try:
-                    val = float(val)
-                except (TypeError, ValueError):
-                    continue
-                spot_rows.append({
-                    'code': name,
-                    'description': name,
-                    'date': row_date.isoformat(),
-                    'value': val,
-                })
-
-        if not spot_rows:
-            messages.error(request, 'No valid data rows found in file.')
-            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
-
-        session_id = str(uuid.uuid4())
-        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_file = os.path.join(temp_dir, f'{session_id}.json')
-        with open(temp_file, 'w', encoding='utf-8') as f:
+        # Store session metadata — full parsing happens at confirm time
+        meta_file = os.path.join(temp_dir, f'{session_id}.json')
+        with open(meta_file, 'w', encoding='utf-8') as f:
             json.dump({
+                'type': 'batch',
                 'filename': upload_file.name,
                 'vessel_size': vessel_size,
-                'rows': spot_rows,
+                'xlsx_path': xlsx_path,
+                'columns': columns,
             }, f)
 
         return redirect('voyage:review_excel_mappings', session_id=session_id)
@@ -1420,7 +1396,14 @@ def upload_batch_indices(request):
 
 
 def review_excel_mappings(request, session_id):
-    """Show / confirm per-code mapping between Excel RateCodes and AvailableIndex entries."""
+    """Show / confirm per-code mapping between Excel RateCodes and AvailableIndex entries.
+
+    Handles two session types:
+      'batch' — large historical files saved as .xlsx on disk; parsed at confirm time
+               using streaming + batched bulk_create to avoid timeouts.
+      'eod'   — small daily EOD files whose rows were pre-parsed into the session JSON.
+    """
+    import openpyxl
     from .models import IndexCodeMapping
 
     temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
@@ -1434,28 +1417,32 @@ def review_excel_mappings(request, session_id):
         session_data = json.load(f)
 
     filename = session_data.get('filename', '')
-    rows = session_data.get('rows', [])
-    session_vessel_size = session_data.get('vessel_size')  # set by batch upload, None for EOD
+    session_type = session_data.get('type', 'eod')       # 'batch' or 'eod'
+    session_vessel_size = session_data.get('vessel_size') # may be None for EOD
 
-    # Build unique codes list (preserve first occurrence order)
-    seen = {}
-    for r in rows:
-        code = r['code']
-        if code not in seen:
-            seen[code] = r  # keep first occurrence as representative
+    # Build unique-codes dict for the review table.
+    # Batch sessions store only column names (no row data yet).
+    # EOD sessions store pre-parsed rows.
+    seen = {}  # code -> representative dict {code, description, date, value}
+    if session_type == 'batch':
+        for col in session_data.get('columns', []):
+            if col not in seen:
+                seen[col] = {'code': col, 'description': col, 'date': '—', 'value': ''}
+    else:
+        for r in session_data.get('rows', []):
+            code = r['code']
+            if code not in seen:
+                seen[code] = r
 
-    # All available indices for the dropdown
+    # Common DB lookups
     all_indices = list(AvailableIndex.objects.filter(is_active=True).order_by('vessel_size', 'name'))
-    # Saved mappings keyed by rate_code
     saved_mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
-    # Existing index names (lowercase) for fast exact-match lookup
     index_by_name = {idx.name.lower(): idx for idx in all_indices}
 
+    # ------------------------------------------------------------------ POST
     if request.method == 'POST':
+        # Step 1: persist the user's mapping choices
         with transaction.atomic():
-            saved = 0
-            skipped_codes = 0
-
             for code in seen:
                 action = request.POST.get(f'action_{code}', 'auto')
                 target_id = request.POST.get(f'target_{code}', '')
@@ -1465,10 +1452,8 @@ def review_excel_mappings(request, session_id):
                         rate_code=code,
                         defaults={'skip': True, 'target_index': None},
                     )
-                    skipped_codes += 1
                     continue
 
-                # Resolve target index
                 target_index = None
                 if target_id:
                     try:
@@ -1477,71 +1462,147 @@ def review_excel_mappings(request, session_id):
                         pass
 
                 if target_index is None:
-                    # auto-create: prefer session vessel_size (batch upload) over auto-detect
                     vs = session_vessel_size or _rate_code_vessel_size(code)
                     target_index, _ = AvailableIndex.objects.get_or_create(
                         name=code,
                         defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
                     )
 
-                # Save mapping for future uploads
                 IndexCodeMapping.objects.update_or_create(
                     rate_code=code,
                     defaults={'skip': False, 'target_index': target_index},
                 )
 
-            # Now import values using saved mappings
-            mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
-            dates_seen = set()
-            new_values = 0
+        # Step 2: import values — different strategy per session type
+        mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
+        dates_seen = set()
+        new_values = 0
 
-            for r in rows:
-                code = r['code']
-                mapping = mappings.get(code)
-                if mapping and mapping.skip:
+        if session_type == 'batch':
+            # Stream the saved .xlsx row-by-row; bulk_create in batches of 500
+            xlsx_path = session_data.get('xlsx_path', '')
+            if not os.path.exists(xlsx_path):
+                messages.error(request, 'Uploaded file no longer found. Please upload again.')
+                return redirect('voyage:upload_batch_indices')
+
+            # Resolve index objects for each column up-front
+            col_index_map = {}   # col_name -> AvailableIndex (or None if skipped)
+            for col in session_data.get('columns', []):
+                m = mappings.get(col)
+                if m and m.skip:
+                    col_index_map[col] = None
                     continue
-
-                target_index = mapping.target_index if (mapping and mapping.target_index) else None
-                if target_index is None:
-                    vs = session_vessel_size or _rate_code_vessel_size(code)
-                    target_index, _ = AvailableIndex.objects.get_or_create(
-                        name=code,
+                idx_obj = m.target_index if (m and m.target_index) else None
+                if idx_obj is None:
+                    vs = session_vessel_size or _rate_code_vessel_size(col)
+                    idx_obj, _ = AvailableIndex.objects.get_or_create(
+                        name=col,
                         defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
                     )
+                col_index_map[col] = idx_obj
 
-                row_date = _parse_date(r['date'])
+            wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+            ws = wb.active
+            header = None
+            index_cols = []   # [(col_offset_in_header, col_name), ...]
+            batch = []
+            BATCH_SIZE = 500
+
+            for row in ws.iter_rows(min_row=1, values_only=True):
+                if header is None:
+                    header = row
+                    for i, cell in enumerate(header[1:], start=1):
+                        name = str(cell).strip() if cell else ''
+                        if name and name in col_index_map:
+                            index_cols.append((i, name))
+                    continue
+
+                date_val = row[0] if row else None
+                if date_val is None:
+                    continue
+                if isinstance(date_val, datetime):
+                    row_date = date_val.date()
+                else:
+                    row_date = _parse_date(str(date_val))
                 if not row_date:
                     continue
 
-                _, created = DailyIndexValue.objects.get_or_create(
-                    index=target_index,
-                    date=row_date,
-                    defaults={'value': r['value']},
-                )
-                dates_seen.add(row_date)
-                if created:
-                    new_values += 1
+                for col_i, col_name in index_cols:
+                    idx_obj = col_index_map.get(col_name)
+                    if idx_obj is None:
+                        continue
+                    val = row[col_i] if col_i < len(row) else None
+                    if val is None:
+                        continue
+                    try:
+                        val = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                    batch.append(DailyIndexValue(index=idx_obj, date=row_date, value=val))
+                    dates_seen.add(row_date)
+                    if len(batch) >= BATCH_SIZE:
+                        created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                        new_values += len(created)
+                        batch = []
 
-        try:
-            os.remove(temp_file)
-        except OSError:
-            pass
+            wb.close()
+            if batch:
+                created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                new_values += len(created)
+
+            # Clean up both temp files
+            for path in (temp_file, xlsx_path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+        else:
+            # EOD: rows already parsed in session JSON — use bulk_create too
+            batch = []
+            BATCH_SIZE = 500
+            for r in session_data.get('rows', []):
+                code = r['code']
+                m = mappings.get(code)
+                if m and m.skip:
+                    continue
+                idx_obj = m.target_index if (m and m.target_index) else None
+                if idx_obj is None:
+                    vs = session_vessel_size or _rate_code_vessel_size(code)
+                    idx_obj, _ = AvailableIndex.objects.get_or_create(
+                        name=code,
+                        defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
+                    )
+                row_date = _parse_date(r['date'])
+                if not row_date:
+                    continue
+                batch.append(DailyIndexValue(index=idx_obj, date=row_date, value=r['value']))
+                dates_seen.add(row_date)
+                if len(batch) >= BATCH_SIZE:
+                    created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                    new_values += len(created)
+                    batch = []
+            if batch:
+                created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                new_values += len(created)
+            try:
+                os.remove(temp_file)
+            except OSError:
+                pass
 
         if new_values:
-            messages.success(
-                request,
-                f'Imported {new_values} index values for {", ".join(str(d) for d in sorted(dates_seen))}.'
-            )
+            date_summary = f'{min(dates_seen)} → {max(dates_seen)}' if len(dates_seen) > 3 else ', '.join(str(d) for d in sorted(dates_seen))
+            messages.success(request, f'Imported {new_values} index values ({date_summary}).')
         else:
             messages.info(request, 'All values already existed — nothing new imported.')
-        return redirect('voyage:upload_excel_indices')
 
-    # Build rows for template
+        redirect_url = 'voyage:upload_batch_indices' if session_type == 'batch' else 'voyage:upload_excel_indices'
+        return redirect(redirect_url)
+
+    # ------------------------------------------------------------------ GET
     mapping_rows = []
     for code, rep in seen.items():
         saved = saved_mappings.get(code)
-
-        # Determine current best suggestion
         if saved and not saved.skip and saved.target_index:
             suggested = saved.target_index
             status = 'mapped'
@@ -1564,12 +1625,12 @@ def review_excel_mappings(request, session_id):
             'status': status,
         })
 
-    # Sort: new/unmatched first, then exact/mapped
     mapping_rows.sort(key=lambda r: (0 if r['status'] in ('new', 'skip') else 1, r['code']))
 
     context = {
         'filename': filename,
         'session_id': session_id,
+        'session_type': session_type,
         'mapping_rows': mapping_rows,
         'all_indices': all_indices,
         'total': len(mapping_rows),

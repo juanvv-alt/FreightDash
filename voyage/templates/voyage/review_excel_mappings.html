@@ -37,8 +37,8 @@
             <tr>
               <th style="width:130px">Rate Code</th>
               <th>Description</th>
-              <th style="width:100px">Date</th>
-              <th style="width:90px" class="text-end">Value</th>
+              {% if session_type != 'batch' %}<th style="width:100px">Date</th>
+              <th style="width:90px" class="text-end">Value</th>{% endif %}
               <th style="width:320px">Map to DB Index</th>
               <th style="width:70px" class="text-center">Skip</th>
             </tr>
@@ -58,8 +58,8 @@
                 {% endif %}
               </td>
               <td class="text-muted small">{{ row.description }}</td>
-              <td class="small">{{ row.date }}</td>
-              <td class="text-end small">{{ row.value|floatformat:2 }}</td>
+              {% if session_type != 'batch' %}<td class="small">{{ row.date }}</td>
+              <td class="text-end small">{{ row.value|floatformat:2 }}</td>{% endif %}
               <td>
                 <select name="target_{{ row.code }}"
                         class="form-select form-select-sm mapping-select"
