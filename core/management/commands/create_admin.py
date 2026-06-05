@@ -3,23 +3,20 @@ from django.contrib.auth.models import User
 
 
 class Command(BaseCommand):
-    help = 'Create a default admin user if it does not exist'
+    help = 'Create the default superuser (Juan/enter) if it does not already exist'
 
     def handle(self, *args, **options):
+        # Remove legacy admin/admin account if it was created by an older version
         if User.objects.filter(username='admin').exists():
-            self.stdout.write(
-                self.style.SUCCESS(
-                    'Admin user already exists'
-                )
-            )
+            User.objects.filter(username='admin').delete()
+            self.stdout.write(self.style.WARNING('Removed legacy admin/admin account'))
+
+        if User.objects.filter(username='Juan').exists():
+            self.stdout.write(self.style.SUCCESS('Default user Juan already exists'))
         else:
             User.objects.create_superuser(
-                username='admin',
-                email='admin@freightdash.local',
-                password='admin'
+                username='Juan',
+                email='juan@freightdash.local',
+                password='enter',
             )
-            self.stdout.write(
-                self.style.SUCCESS(
-                    'Successfully created admin user with username: admin, password: admin'
-                )
-            )
+            self.stdout.write(self.style.SUCCESS('Created superuser Juan (password: enter)'))
