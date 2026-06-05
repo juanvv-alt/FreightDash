@@ -1,10 +1,11 @@
 {% extends 'base.html' %}
+
 {% block title %}Upload Baltic Excel Indices{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
   <div class="row justify-content-center">
-    <div class="col-lg-6">
+    <div class="col-lg-5">
 
       <h4 class="mb-4"><i class="fas fa-file-excel me-2 text-success"></i>Upload Baltic Exchange Report</h4>
 
@@ -17,32 +18,12 @@
         {% endfor %}
       {% endif %}
 
-      {% if result %}
-      <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body">
-          <h6 class="card-title mb-3"><i class="fas fa-check-circle text-success me-1"></i>Import complete — {{ result.filename }}</h6>
-          <table class="table table-sm mb-0">
-            <tr><td class="text-muted">New values saved</td><td><strong>{{ result.saved }}</strong></td></tr>
-            <tr><td class="text-muted">Already existed (skipped)</td><td>{{ result.skipped }}</td></tr>
-            <tr><td class="text-muted">New indices created</td><td>{{ result.new_indices }}</td></tr>
-            <tr>
-              <td class="text-muted">Date(s)</td>
-              <td>
-                {% for d in result.dates %}
-                  <span class="badge bg-secondary me-1">{{ d }}</span>
-                {% endfor %}
-              </td>
-            </tr>
-          </table>
-        </div>
-      </div>
-      {% endif %}
-
       <div class="card border-0 shadow-sm">
         <div class="card-body">
           <p class="text-muted small mb-3">
             Upload the daily <strong>End of Day Report .xlsx</strong> from Baltic Exchange.
-            The <em>Baltic</em> tab will be read — only <strong>Spot</strong> rows are imported.
+            The <em>Baltic</em> tab is read — only <strong>Spot</strong> rows are imported.<br>
+            You will be shown a mapping review before anything is saved.
           </p>
           <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
@@ -51,7 +32,7 @@
               <input type="file" name="upload_file" accept=".xlsx" class="form-control" required>
             </div>
             <button type="submit" class="btn btn-primary">
-              <i class="fas fa-upload me-1"></i>Upload &amp; Import
+              <i class="fas fa-arrow-right me-1"></i>Continue to mapping review
             </button>
           </form>
         </div>
@@ -59,7 +40,7 @@
 
       <p class="text-muted small mt-3">
         <i class="fas fa-info-circle me-1"></i>
-        After importing, values will appear in
+        Imported values appear in
         <a href="{% url 'voyage:indices_by_vessel' 'panamax' %}">Indices</a> and the
         <a href="{% url 'voyage:freight_matrix' %}">Freight Matrix</a>.
       </p>

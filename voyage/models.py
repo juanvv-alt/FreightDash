@@ -283,6 +283,31 @@ class VoyageFuelSplit(models.Model):
         return f"{self.voyage.name} - {self.fuel_index.name} ({self.weight_pct}%)"
 
 
+class IndexCodeMapping(models.Model):
+    """Persistent mapping from an Excel RateCode to an AvailableIndex (or skip flag)."""
+    rate_code = models.CharField(max_length=120, unique=True, help_text='RateCode from Baltic Exchange Excel')
+    target_index = models.ForeignKey(
+        'AvailableIndex',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='code_mappings',
+        help_text='Leave blank to auto-create a new index using the rate code as name',
+    )
+    skip = models.BooleanField(default=False, help_text='Do not import this rate code')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['rate_code']
+        verbose_name = 'Index Code Mapping'
+        verbose_name_plural = 'Index Code Mappings'
+
+    def __str__(self):
+        if self.skip:
+            return f'{self.rate_code} → [skip]'
+        return f'{self.rate_code} → {self.target_index.name if self.target_index else "[auto-create]"}'
+
+
 class VesselCompareConfig(models.Model):
     """Singleton storing market inputs for the vessel comparison tool."""
     hire = models.FloatField(default=23000)

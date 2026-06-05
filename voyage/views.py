@@ -1250,99 +1250,233 @@ def _rate_code_vessel_size(code):
     return 'panamax'
 
 
-def upload_excel_indices(request):
-    """Upload the daily Baltic Exchange End-of-Day .xlsx and populate DailyIndexValue."""
+def _parse_excel_spot_rows(upload_file):
+    """Parse the Baltic tab of an uploaded .xlsx and return (spot_rows, error_msg).
+
+    spot_rows is a list of dicts: {code, description, date (date obj), value (float)}.
+    Returns (None, error_msg) on failure.
+    """
     import openpyxl
+    try:
+        wb = openpyxl.load_workbook(upload_file, read_only=True, data_only=True)
+    except Exception as exc:
+        return None, f'Could not open file: {exc}'
 
-    result = None
+    if 'Baltic' not in wb.sheetnames:
+        return None, "No 'Baltic' sheet found in this workbook."
 
+    ws = wb['Baltic']
+    spot_rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if len(row) < 5:
+            continue
+        rate_code, desc, period, rate_date, value = row[0], row[1], row[2], row[3], row[4]
+        if period != 'Spot':
+            continue
+        if not rate_code or value is None:
+            continue
+        if isinstance(rate_date, datetime):
+            rate_date = rate_date.date()
+        elif isinstance(rate_date, str):
+            rate_date = _parse_date(rate_date)
+        if not rate_date:
+            continue
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        spot_rows.append({
+            'code': str(rate_code).strip(),
+            'description': str(desc).strip() if desc else '',
+            'date': rate_date.isoformat(),
+            'value': value,
+        })
+    if not spot_rows:
+        return None, 'No Spot rows found in the Baltic sheet.'
+    return spot_rows, None
+
+
+def upload_excel_indices(request):
+    """Upload the daily Baltic Exchange End-of-Day .xlsx — parse and redirect to mapping review."""
     if request.method == 'POST':
         upload_file = request.FILES.get('upload_file')
         if not upload_file:
             messages.error(request, 'Please select an .xlsx file.')
-            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
+            return render(request, 'voyage/upload_excel_indices.html', {})
+
+        spot_rows, err = _parse_excel_spot_rows(upload_file)
+        if err:
+            messages.error(request, err)
+            return render(request, 'voyage/upload_excel_indices.html', {})
+
+        session_id = str(uuid.uuid4())
+        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file = os.path.join(temp_dir, f'{session_id}.json')
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump({'filename': upload_file.name, 'rows': spot_rows}, f)
+
+        return redirect('voyage:review_excel_mappings', session_id=session_id)
+
+    return render(request, 'voyage/upload_excel_indices.html', {})
+
+
+def review_excel_mappings(request, session_id):
+    """Show / confirm per-code mapping between Excel RateCodes and AvailableIndex entries."""
+    from .models import IndexCodeMapping
+
+    temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+    temp_file = os.path.join(temp_dir, f'{session_id}.json')
+
+    if not os.path.exists(temp_file):
+        messages.error(request, 'Upload session not found or expired. Please upload again.')
+        return redirect('voyage:upload_excel_indices')
+
+    with open(temp_file, 'r', encoding='utf-8') as f:
+        session_data = json.load(f)
+
+    filename = session_data.get('filename', '')
+    rows = session_data.get('rows', [])
+
+    # Build unique codes list (preserve first occurrence order)
+    seen = {}
+    for r in rows:
+        code = r['code']
+        if code not in seen:
+            seen[code] = r  # keep first occurrence as representative
+
+    # All available indices for the dropdown
+    all_indices = list(AvailableIndex.objects.filter(is_active=True).order_by('vessel_size', 'name'))
+    # Saved mappings keyed by rate_code
+    saved_mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
+    # Existing index names (lowercase) for fast exact-match lookup
+    index_by_name = {idx.name.lower(): idx for idx in all_indices}
+
+    if request.method == 'POST':
+        with transaction.atomic():
+            saved = 0
+            skipped_codes = 0
+
+            for code in seen:
+                action = request.POST.get(f'action_{code}', 'auto')
+                target_id = request.POST.get(f'target_{code}', '')
+
+                if action == 'skip':
+                    IndexCodeMapping.objects.update_or_create(
+                        rate_code=code,
+                        defaults={'skip': True, 'target_index': None},
+                    )
+                    skipped_codes += 1
+                    continue
+
+                # Resolve target index
+                target_index = None
+                if target_id:
+                    try:
+                        target_index = AvailableIndex.objects.get(pk=int(target_id))
+                    except (AvailableIndex.DoesNotExist, ValueError):
+                        pass
+
+                if target_index is None:
+                    # auto-create
+                    vessel_size = _rate_code_vessel_size(code)
+                    target_index, _ = AvailableIndex.objects.get_or_create(
+                        name=code,
+                        defaults={'vessel_size': vessel_size, 'order': 999, 'is_active': True},
+                    )
+
+                # Save mapping for future uploads
+                IndexCodeMapping.objects.update_or_create(
+                    rate_code=code,
+                    defaults={'skip': False, 'target_index': target_index},
+                )
+
+            # Now import values using saved mappings
+            mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
+            dates_seen = set()
+            new_values = 0
+
+            for r in rows:
+                code = r['code']
+                mapping = mappings.get(code)
+                if mapping and mapping.skip:
+                    continue
+
+                target_index = mapping.target_index if (mapping and mapping.target_index) else None
+                if target_index is None:
+                    vessel_size = _rate_code_vessel_size(code)
+                    target_index, _ = AvailableIndex.objects.get_or_create(
+                        name=code,
+                        defaults={'vessel_size': vessel_size, 'order': 999, 'is_active': True},
+                    )
+
+                row_date = _parse_date(r['date'])
+                if not row_date:
+                    continue
+
+                _, created = DailyIndexValue.objects.get_or_create(
+                    index=target_index,
+                    date=row_date,
+                    defaults={'value': r['value']},
+                )
+                dates_seen.add(row_date)
+                if created:
+                    new_values += 1
 
         try:
-            wb = openpyxl.load_workbook(upload_file, read_only=True, data_only=True)
-        except Exception as exc:
-            messages.error(request, f'Could not open file: {exc}')
-            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
+            os.remove(temp_file)
+        except OSError:
+            pass
 
-        if 'Baltic' not in wb.sheetnames:
-            messages.error(request, "No 'Baltic' sheet found in this workbook.")
-            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
-
-        ws = wb['Baltic']
-
-        # Collect Spot rows: {date: {rate_code: value}}
-        spot_rows = []
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if len(row) < 5:
-                continue
-            rate_code, desc, period, rate_date, value = row[0], row[1], row[2], row[3], row[4]
-            if period != 'Spot':
-                continue
-            if not rate_code or value is None:
-                continue
-            if isinstance(rate_date, datetime):
-                rate_date = rate_date.date()
-            elif isinstance(rate_date, str):
-                rate_date = _parse_date(rate_date)
-            if not rate_date:
-                continue
-            try:
-                value = float(value)
-            except (TypeError, ValueError):
-                continue
-            spot_rows.append({
-                'code': str(rate_code).strip(),
-                'date': rate_date,
-                'value': value,
-            })
-
-        if not spot_rows:
-            messages.warning(request, 'No Spot rows found in the Baltic sheet.')
-            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
-
-        saved = 0
-        skipped = 0
-        new_indices = 0
-        dates_seen = set()
-
-        with transaction.atomic():
-            for item in spot_rows:
-                code = item['code']
-                vessel_size = _rate_code_vessel_size(code)
-                idx_obj, created = AvailableIndex.objects.get_or_create(
-                    name=code,
-                    defaults={'vessel_size': vessel_size, 'order': 999, 'is_active': True},
-                )
-                if created:
-                    new_indices += 1
-                _, was_created = DailyIndexValue.objects.get_or_create(
-                    index=idx_obj,
-                    date=item['date'],
-                    defaults={'value': item['value']},
-                )
-                dates_seen.add(item['date'])
-                if was_created:
-                    saved += 1
-                else:
-                    skipped += 1
-
-        result = {
-            'saved': saved,
-            'skipped': skipped,
-            'new_indices': new_indices,
-            'dates': sorted(dates_seen),
-            'filename': upload_file.name,
-        }
-        if saved:
-            messages.success(request, f'Imported {saved} index values for {", ".join(str(d) for d in sorted(dates_seen))}.')
+        if new_values:
+            messages.success(
+                request,
+                f'Imported {new_values} index values for {", ".join(str(d) for d in sorted(dates_seen))}.'
+            )
         else:
             messages.info(request, 'All values already existed — nothing new imported.')
+        return redirect('voyage:upload_excel_indices')
 
-    return render(request, 'voyage/upload_excel_indices.html', {'result': result})
+    # Build rows for template
+    mapping_rows = []
+    for code, rep in seen.items():
+        saved = saved_mappings.get(code)
+
+        # Determine current best suggestion
+        if saved and not saved.skip and saved.target_index:
+            suggested = saved.target_index
+            status = 'mapped'
+        elif saved and saved.skip:
+            suggested = None
+            status = 'skip'
+        elif code.lower() in index_by_name:
+            suggested = index_by_name[code.lower()]
+            status = 'exact'
+        else:
+            suggested = None
+            status = 'new'
+
+        mapping_rows.append({
+            'code': code,
+            'description': rep['description'],
+            'date': rep['date'],
+            'value': rep['value'],
+            'suggested': suggested,
+            'status': status,
+        })
+
+    # Sort: new/unmatched first, then exact/mapped
+    mapping_rows.sort(key=lambda r: (0 if r['status'] in ('new', 'skip') else 1, r['code']))
+
+    context = {
+        'filename': filename,
+        'session_id': session_id,
+        'mapping_rows': mapping_rows,
+        'all_indices': all_indices,
+        'total': len(mapping_rows),
+        'unmatched': sum(1 for r in mapping_rows if r['status'] == 'new'),
+    }
+    return render(request, 'voyage/review_excel_mappings.html', context)
 
 
 def vessel_compare(request):
