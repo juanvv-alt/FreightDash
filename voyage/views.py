@@ -1321,6 +1321,104 @@ def upload_excel_indices(request):
     return render(request, 'voyage/upload_excel_indices.html', {})
 
 
+def upload_batch_indices(request):
+    """Upload a historical columnar indices .xlsx (Date column + one column per index)."""
+    VESSEL_CHOICES = [
+        ('panamax', 'Panamax'),
+        ('capesize', 'Capesize'),
+        ('supramax', 'Supramax'),
+        ('handysize', 'Handysize'),
+        ('bunker', 'Bunker'),
+    ]
+
+    if request.method == 'POST':
+        import openpyxl
+        upload_file = request.FILES.get('upload_file')
+        vessel_size = request.POST.get('vessel_size', 'panamax')
+        if vessel_size not in dict(VESSEL_CHOICES):
+            vessel_size = 'panamax'
+
+        if not upload_file:
+            messages.error(request, 'Please select an .xlsx file.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        try:
+            wb = openpyxl.load_workbook(upload_file, read_only=True, data_only=True)
+        except Exception as exc:
+            messages.error(request, f'Could not open file: {exc}')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        ws = wb.active
+        all_rows = list(ws.iter_rows(min_row=1, values_only=True))
+        if not all_rows:
+            messages.error(request, 'File appears to be empty.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        header = all_rows[0]
+        if not header or str(header[0]).strip().lower() != 'date':
+            messages.error(request, 'Expected first column to be "Date". Check the file format.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        # index_cols: list of (col_index, index_name)
+        index_cols = []
+        for i, cell in enumerate(header[1:], start=1):
+            if cell is not None and str(cell).strip():
+                index_cols.append((i, str(cell).strip()))
+
+        if not index_cols:
+            messages.error(request, 'No index columns found in header row.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        spot_rows = []
+        skipped = 0
+        for row in all_rows[1:]:
+            if not row or row[0] is None:
+                continue
+            date_val = row[0]
+            if isinstance(date_val, datetime):
+                row_date = date_val.date()
+            else:
+                row_date = _parse_date(str(date_val))
+            if not row_date:
+                skipped += 1
+                continue
+            for col_idx, name in index_cols:
+                if col_idx >= len(row):
+                    continue
+                val = row[col_idx]
+                if val is None:
+                    continue
+                try:
+                    val = float(val)
+                except (TypeError, ValueError):
+                    continue
+                spot_rows.append({
+                    'code': name,
+                    'description': name,
+                    'date': row_date.isoformat(),
+                    'value': val,
+                })
+
+        if not spot_rows:
+            messages.error(request, 'No valid data rows found in file.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        session_id = str(uuid.uuid4())
+        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file = os.path.join(temp_dir, f'{session_id}.json')
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'filename': upload_file.name,
+                'vessel_size': vessel_size,
+                'rows': spot_rows,
+            }, f)
+
+        return redirect('voyage:review_excel_mappings', session_id=session_id)
+
+    return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+
 def review_excel_mappings(request, session_id):
     """Show / confirm per-code mapping between Excel RateCodes and AvailableIndex entries."""
     from .models import IndexCodeMapping
@@ -1337,6 +1435,7 @@ def review_excel_mappings(request, session_id):
 
     filename = session_data.get('filename', '')
     rows = session_data.get('rows', [])
+    session_vessel_size = session_data.get('vessel_size')  # set by batch upload, None for EOD
 
     # Build unique codes list (preserve first occurrence order)
     seen = {}
@@ -1378,11 +1477,11 @@ def review_excel_mappings(request, session_id):
                         pass
 
                 if target_index is None:
-                    # auto-create
-                    vessel_size = _rate_code_vessel_size(code)
+                    # auto-create: prefer session vessel_size (batch upload) over auto-detect
+                    vs = session_vessel_size or _rate_code_vessel_size(code)
                     target_index, _ = AvailableIndex.objects.get_or_create(
                         name=code,
-                        defaults={'vessel_size': vessel_size, 'order': 999, 'is_active': True},
+                        defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
                     )
 
                 # Save mapping for future uploads
@@ -1404,10 +1503,10 @@ def review_excel_mappings(request, session_id):
 
                 target_index = mapping.target_index if (mapping and mapping.target_index) else None
                 if target_index is None:
-                    vessel_size = _rate_code_vessel_size(code)
+                    vs = session_vessel_size or _rate_code_vessel_size(code)
                     target_index, _ = AvailableIndex.objects.get_or_create(
                         name=code,
-                        defaults={'vessel_size': vessel_size, 'order': 999, 'is_active': True},
+                        defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
                     )
 
                 row_date = _parse_date(r['date'])
