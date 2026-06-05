@@ -32,7 +32,8 @@ def seed(apps, schema_editor):
     ComparisonVessel = apps.get_model('voyage', 'ComparisonVessel')
     VesselCompareConfig = apps.get_model('voyage', 'VesselCompareConfig')
     for v in SEED_VESSELS:
-        ComparisonVessel.objects.get_or_create(name=v['name'], defaults=v)
+        defaults = {k: val for k, val in v.items() if k != 'name'}
+        ComparisonVessel.objects.get_or_create(name=v['name'], defaults=defaults)
     VesselCompareConfig.objects.get_or_create(pk=1)
 
 
@@ -51,7 +52,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='VesselCompareConfig',
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False)),
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('hire', models.FloatField(default=23000)),
                 ('ifo_price', models.FloatField(default=800)),
                 ('mgo_price', models.FloatField(default=1300)),
@@ -82,7 +83,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='ComparisonVessel',
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False)),
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(max_length=120)),
                 ('order', models.PositiveIntegerField(default=0)),
                 ('is_standard', models.BooleanField(default=False)),
