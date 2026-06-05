@@ -1237,6 +1237,114 @@ def _save_selected_indices(request, session_data, temp_file):
     return redirect('voyage:upload_pdf_indices')
 
 
+def _rate_code_vessel_size(code):
+    c = (code or '').upper().strip()
+    if c.startswith('HS'):
+        return 'handysize'
+    if c.startswith('C') or c.startswith('BCI'):
+        return 'capesize'
+    if c.startswith('P') or c.startswith('BPI'):
+        return 'panamax'
+    if c.startswith('S') or c.startswith('BSI'):
+        return 'supramax'
+    return 'panamax'
+
+
+def upload_excel_indices(request):
+    """Upload the daily Baltic Exchange End-of-Day .xlsx and populate DailyIndexValue."""
+    import openpyxl
+
+    result = None
+
+    if request.method == 'POST':
+        upload_file = request.FILES.get('upload_file')
+        if not upload_file:
+            messages.error(request, 'Please select an .xlsx file.')
+            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
+
+        try:
+            wb = openpyxl.load_workbook(upload_file, read_only=True, data_only=True)
+        except Exception as exc:
+            messages.error(request, f'Could not open file: {exc}')
+            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
+
+        if 'Baltic' not in wb.sheetnames:
+            messages.error(request, "No 'Baltic' sheet found in this workbook.")
+            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
+
+        ws = wb['Baltic']
+
+        # Collect Spot rows: {date: {rate_code: value}}
+        spot_rows = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if len(row) < 5:
+                continue
+            rate_code, desc, period, rate_date, value = row[0], row[1], row[2], row[3], row[4]
+            if period != 'Spot':
+                continue
+            if not rate_code or value is None:
+                continue
+            if isinstance(rate_date, datetime):
+                rate_date = rate_date.date()
+            elif isinstance(rate_date, str):
+                rate_date = _parse_date(rate_date)
+            if not rate_date:
+                continue
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                continue
+            spot_rows.append({
+                'code': str(rate_code).strip(),
+                'date': rate_date,
+                'value': value,
+            })
+
+        if not spot_rows:
+            messages.warning(request, 'No Spot rows found in the Baltic sheet.')
+            return render(request, 'voyage/upload_excel_indices.html', {'result': None})
+
+        saved = 0
+        skipped = 0
+        new_indices = 0
+        dates_seen = set()
+
+        with transaction.atomic():
+            for item in spot_rows:
+                code = item['code']
+                vessel_size = _rate_code_vessel_size(code)
+                idx_obj, created = AvailableIndex.objects.get_or_create(
+                    name=code,
+                    defaults={'vessel_size': vessel_size, 'order': 999, 'is_active': True},
+                )
+                if created:
+                    new_indices += 1
+                _, was_created = DailyIndexValue.objects.get_or_create(
+                    index=idx_obj,
+                    date=item['date'],
+                    defaults={'value': item['value']},
+                )
+                dates_seen.add(item['date'])
+                if was_created:
+                    saved += 1
+                else:
+                    skipped += 1
+
+        result = {
+            'saved': saved,
+            'skipped': skipped,
+            'new_indices': new_indices,
+            'dates': sorted(dates_seen),
+            'filename': upload_file.name,
+        }
+        if saved:
+            messages.success(request, f'Imported {saved} index values for {", ".join(str(d) for d in sorted(dates_seen))}.')
+        else:
+            messages.info(request, 'All values already existed — nothing new imported.')
+
+    return render(request, 'voyage/upload_excel_indices.html', {'result': result})
+
+
 def vessel_compare(request):
     from .models import ComparisonVessel, ComparisonVoyage, VesselCompareConfig, VesselVoyageIntake
 
