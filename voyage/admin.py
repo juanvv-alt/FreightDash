@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from io import BytesIO
 
+import nested_admin
 from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
@@ -107,98 +108,119 @@ class DailyIndexValueAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'updated_at')
 
 
-class VesselSpeedProfileInline(admin.TabularInline):
+# ---------------------------------------------------------------------------
+# Vessel profile — all speed + fuel data on a single page via nested inlines
+# ---------------------------------------------------------------------------
+
+class VesselSpeedProfileInline(nested_admin.NestedTabularInline):
     model = VesselSpeedProfile
     extra = 1
     fields = ('name', 'ballast_speed', 'laden_speed', 'is_default')
+    verbose_name = 'Speed Profile'
+    verbose_name_plural = 'Speed Profiles  (e.g. CP, ECO, SUPER ECO)'
 
 
-class VesselFuelConsumptionInline(admin.TabularInline):
+class VesselFuelConsumptionNestedInline(nested_admin.NestedTabularInline):
+    model = VesselFuelConsumption
+    extra = 1
+    fields = ('fuel_type', 'sea_consumption', 'port_consumption')
+    verbose_name = 'Fuel line'
+    verbose_name_plural = 'Fuel lines  (MT/day)'
+
+
+class VesselFuelProfileInline(nested_admin.NestedStackedInline):
+    model = VesselFuelProfile
+    extra = 1
+    fields = ('name', 'is_default')
+    inlines = [VesselFuelConsumptionNestedInline]
+    verbose_name = 'Consumption Profile'
+    verbose_name_plural = 'Consumption Profiles  (e.g. CP CONS, ECO CONS)'
+    show_change_link = False
+
+
+@admin.register(VesselProfile)
+class VesselProfileAdmin(nested_admin.NestedModelAdmin):
+    list_display = ('name', 'vessel_size', 'dwt', 'draft', 'grain_capacity', 'is_active')
+    list_filter = ('vessel_size', 'is_active')
+    search_fields = ('name',)
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [VesselSpeedProfileInline, VesselFuelProfileInline]
+    fieldsets = (
+        ('Vessel', {
+            'fields': (('name', 'vessel_size', 'is_active'), ('dwt', 'draft', 'grain_capacity'), 'npc', 'default_port_consumption'),
+        }),
+    )
+
+
+# Keep a minimal standalone VesselFuelProfile admin for direct lookup / bulk edits
+class VesselFuelConsumptionInlineStandalone(admin.TabularInline):
     model = VesselFuelConsumption
     extra = 1
     fields = ('fuel_type', 'sea_consumption', 'port_consumption')
 
 
-class VesselFuelProfileInline(admin.StackedInline):
-    model = VesselFuelProfile
-    extra = 1
-    fields = ('name', 'is_default')
-
-
-@admin.register(VesselProfile)
-class VesselProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'vessel_size', 'dwt', 'draft', 'grain_capacity', 'is_active')
-    list_filter = ('vessel_size', 'is_active')
-    search_fields = ('name',)
-    inlines = (VesselSpeedProfileInline, VesselFuelProfileInline)
-    readonly_fields = ('created_at', 'updated_at')
-
-
 @admin.register(VesselFuelProfile)
 class VesselFuelProfileAdmin(admin.ModelAdmin):
-    list_display = ('name', 'vessel', 'is_default', 'updated_at')
+    list_display = ('vessel', 'name', 'is_default')
     list_filter = ('is_default', 'vessel__vessel_size')
     search_fields = ('name', 'vessel__name')
-    inlines = (VesselFuelConsumptionInline,)
+    inlines = (VesselFuelConsumptionInlineStandalone,)
     readonly_fields = ('created_at', 'updated_at')
+    ordering = ('vessel__name', 'name')
 
+
+# ---------------------------------------------------------------------------
+# Freight voyage — 3 clear sections instead of 8
+# ---------------------------------------------------------------------------
 
 class VoyageFuelSplitInline(admin.TabularInline):
     model = VoyageFuelSplit
     extra = 1
     fields = ('fuel_index', 'weight_pct')
+    verbose_name = 'Fuel price index'
+    verbose_name_plural = 'Fuel price split  (index + weight %)'
 
 
 @admin.register(FreightVoyage)
 class FreightVoyageAdmin(admin.ModelAdmin):
-    list_display = ('name', 'vessel', 'load_rate', 'discharge_rate', 'ballast_distance', 'laden_distance', 'is_active')
+    list_display = ('name', 'vessel', 'is_active', 'ballast_distance', 'laden_distance', 'load_rate', 'discharge_rate', 'daily_hire_index')
     list_filter = ('is_active', 'vessel__vessel_size', 'intake_mode')
+    list_editable = ('is_active',)
     search_fields = ('name', 'commodity', 'ballast_port')
     inlines = (VoyageFuelSplitInline,)
+    readonly_fields = ('created_at', 'updated_at')
+    save_on_top = True
+
     fieldsets = (
-        ('Voyage Identification', {
-            'fields': ('name', 'commodity', 'is_active'),
-        }),
-        ('Ports', {
-            'fields': ('load_ports', 'discharge_ports', 'ballast_port'),
-        }),
-        ('Port Operations', {
+        ('Route & Cargo', {
+            'description': 'Distances, ports, loading/discharging rates and cargo intake.',
             'fields': (
-                'load_rate',
-                'discharge_rate',
-                'turntime_load_hours',
-                'turntime_discharge_hours',
+                ('name', 'commodity', 'is_active'),
+                ('ballast_distance', 'laden_distance'),
+                ('ballast_port',),
+                ('load_ports', 'discharge_ports'),
+                ('load_rate', 'turntime_load_hours'),
+                ('discharge_rate', 'turntime_discharge_hours'),
+                ('intake_mode', 'intake_manual'),
+                ('draft_limit', 'stowage_factor'),
             ),
         }),
-        ('Costs and Distances', {
+        ('Vessel & Speed / Fuel Profiles', {
+            'description': 'Select the vessel and which speed/fuel variant to use for this voyage.',
             'fields': (
-                'port_exp_load_port',
-                'port_exp_discharge_port',
-                'misc_expenses',
-                'ballast_distance',
-                'laden_distance',
+                ('vessel', 'speed_profile', 'fuel_profile'),
             ),
         }),
-        ('Vessel and Profiles', {
-            'fields': ('vessel', 'speed_profile', 'fuel_profile'),
-        }),
-        ('Intake', {
-            'fields': ('intake_mode', 'intake_manual', 'draft_limit', 'stowage_factor'),
-        }),
-        ('Margins and Commissions', {
+        ('Financials', {
+            'description': 'Port costs, sea margin, commissions and the daily hire index that drives the freight matrix.',
             'fields': (
-                'apply_same_sea_margin',
-                'sea_margin_ballast_pct',
-                'sea_margin_laden_pct',
-                'address_commission_pct',
-                'brokerage_commission_pct',
+                ('port_exp_load_port', 'port_exp_discharge_port', 'misc_expenses'),
+                ('apply_same_sea_margin', 'sea_margin_ballast_pct', 'sea_margin_laden_pct'),
+                ('address_commission_pct', 'brokerage_commission_pct'),
+                ('daily_hire_index',),
             ),
-        }),
-        ('Daily Hire Link', {
-            'fields': ('daily_hire_index',),
         }),
     )
-    readonly_fields = ('created_at', 'updated_at')
 
 
 def _parse_excel_date(value):
