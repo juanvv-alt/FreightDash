@@ -30,7 +30,7 @@ echo "[entrypoint] Creating default admin user"
 python manage.py create_admin || true
 
 echo "[entrypoint] Collecting static files"
-python manage.py collectstatic --noinput --clear
+python manage.py collectstatic --noinput
 
 echo "[entrypoint] Launching Gunicorn"
 exec gunicorn \

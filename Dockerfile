@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Multi-stage build for optimized production image
 FROM python:3.11-slim as builder
 
@@ -9,9 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# Copy requirements and install Python dependencies.
+# The cache mount persists downloaded wheels between builds on Render,
+# so unchanged requirements cost near-zero on subsequent deploys.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
 # Final production stage
 FROM python:3.11-slim
