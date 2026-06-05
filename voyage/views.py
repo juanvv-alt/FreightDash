@@ -1238,7 +1238,7 @@ def _save_selected_indices(request, session_data, temp_file):
 
 
 def vessel_compare(request):
-    from .models import ComparisonVessel, VesselCompareConfig
+    from .models import ComparisonVessel, ComparisonVoyage, VesselCompareConfig, VesselVoyageIntake
 
     def _f(val, default=0.0):
         try:
@@ -1246,23 +1246,33 @@ def vessel_compare(request):
         except (ValueError, TypeError):
             return float(default)
 
-    def _run_calc(cfg, vessels_qs):
+    def _run_calc(cfg, voyages_qs, vessels_qs):
         voyages = [
-            {'name': cfg.v1_name, 'ballast_dist': cfg.v1_ballast_dist, 'laden_dist': cfg.v1_laden_dist,
-             'load_rate': cfg.v1_load_rate, 'dis_rate': cfg.v1_dis_rate, 'load_factor': cfg.v1_load_factor,
-             'dis_factor': cfg.v1_dis_factor, 'turntimes_hours': cfg.v1_turntimes,
-             'port_exp': cfg.v1_port_exp, 'various_exp': cfg.v1_various_exp},
-            {'name': cfg.v2_name, 'ballast_dist': cfg.v2_ballast_dist, 'laden_dist': cfg.v2_laden_dist,
-             'load_rate': cfg.v2_load_rate, 'dis_rate': cfg.v2_dis_rate, 'load_factor': cfg.v2_load_factor,
-             'dis_factor': cfg.v2_dis_factor, 'turntimes_hours': cfg.v2_turntimes,
-             'port_exp': cfg.v2_port_exp, 'various_exp': cfg.v2_various_exp},
+            {'name': voy.name, 'ballast_dist': voy.ballast_dist, 'laden_dist': voy.laden_dist,
+             'load_rate': voy.load_rate, 'dis_rate': voy.dis_rate,
+             'load_factor': voy.load_factor, 'dis_factor': voy.dis_factor,
+             'turntimes_hours': voy.turntimes_hours,
+             'port_exp': voy.port_exp, 'various_exp': voy.various_exp}
+            for voy in voyages_qs
         ]
-        vessels = [
-            {'name': v.name, 'intakes': [v.intake_v1, v.intake_v2],
-             'laden_speed': v.laden_speed, 'ballast_speed': v.ballast_speed,
-             'laden_cons': v.laden_cons, 'ballast_cons': v.ballast_cons, 'port_cons': v.port_cons}
-            for v in vessels_qs
-        ]
+        # Build intake map: {vessel_id: {voyage_id: intake}}
+        intake_map = {}
+        for vi in VesselVoyageIntake.objects.filter(
+            vessel__in=vessels_qs, voyage__in=voyages_qs
+        ).select_related('vessel', 'voyage'):
+            intake_map.setdefault(vi.vessel_id, {})[vi.voyage_id] = vi.intake
+
+        vessels = []
+        for v in vessels_qs:
+            v_intakes = intake_map.get(v.id, {})
+            intakes = [v_intakes.get(voy.id, v.default_intake) for voy in voyages_qs]
+            vessels.append({
+                'name': v.name, 'intakes': intakes,
+                'laden_speed': v.laden_speed, 'ballast_speed': v.ballast_speed,
+                'laden_cons': v.laden_cons, 'ballast_cons': v.ballast_cons,
+                'port_cons': v.port_cons,
+            })
+
         global_inputs = {'hire': cfg.hire, 'ifo_price': cfg.ifo_price,
                          'mgo_price': cfg.mgo_price, 'weather_factor': cfg.weather_factor}
         r = calculate_vessel_comparison(global_inputs, voyages, vessels)
@@ -1284,43 +1294,82 @@ def vessel_compare(request):
             cfg.ifo_price = _f(request.POST.get('ifo_price'), cfg.ifo_price)
             cfg.mgo_price = _f(request.POST.get('mgo_price'), cfg.mgo_price)
             cfg.weather_factor = _f(request.POST.get('weather_factor'), cfg.weather_factor)
-            cfg.v1_name = request.POST.get('v1_name', cfg.v1_name)
-            cfg.v1_ballast_dist = _f(request.POST.get('v1_ballast_dist'), cfg.v1_ballast_dist)
-            cfg.v1_laden_dist = _f(request.POST.get('v1_laden_dist'), cfg.v1_laden_dist)
-            cfg.v1_load_rate = _f(request.POST.get('v1_load_rate'), cfg.v1_load_rate)
-            cfg.v1_dis_rate = _f(request.POST.get('v1_dis_rate'), cfg.v1_dis_rate)
-            cfg.v1_load_factor = _f(request.POST.get('v1_load_factor'), cfg.v1_load_factor)
-            cfg.v1_dis_factor = _f(request.POST.get('v1_dis_factor'), cfg.v1_dis_factor)
-            cfg.v1_turntimes = _f(request.POST.get('v1_turntimes'), cfg.v1_turntimes)
-            cfg.v1_port_exp = _f(request.POST.get('v1_port_exp'), cfg.v1_port_exp)
-            cfg.v1_various_exp = _f(request.POST.get('v1_various_exp'), cfg.v1_various_exp)
-            cfg.v2_name = request.POST.get('v2_name', cfg.v2_name)
-            cfg.v2_ballast_dist = _f(request.POST.get('v2_ballast_dist'), cfg.v2_ballast_dist)
-            cfg.v2_laden_dist = _f(request.POST.get('v2_laden_dist'), cfg.v2_laden_dist)
-            cfg.v2_load_rate = _f(request.POST.get('v2_load_rate'), cfg.v2_load_rate)
-            cfg.v2_dis_rate = _f(request.POST.get('v2_dis_rate'), cfg.v2_dis_rate)
-            cfg.v2_load_factor = _f(request.POST.get('v2_load_factor'), cfg.v2_load_factor)
-            cfg.v2_dis_factor = _f(request.POST.get('v2_dis_factor'), cfg.v2_dis_factor)
-            cfg.v2_turntimes = _f(request.POST.get('v2_turntimes'), cfg.v2_turntimes)
-            cfg.v2_port_exp = _f(request.POST.get('v2_port_exp'), cfg.v2_port_exp)
-            cfg.v2_various_exp = _f(request.POST.get('v2_various_exp'), cfg.v2_various_exp)
             cfg.save()
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'add_voyage':
+            name = request.POST.get('new_voy_name', '').strip()
+            if name:
+                next_order = ComparisonVoyage.objects.count()
+                voy = ComparisonVoyage.objects.create(
+                    name=name, order=next_order,
+                    ballast_dist=_f(request.POST.get('new_voy_ballast_dist'), 5000),
+                    laden_dist=_f(request.POST.get('new_voy_laden_dist'), 5000),
+                    load_rate=_f(request.POST.get('new_voy_load_rate'), 10000),
+                    dis_rate=_f(request.POST.get('new_voy_dis_rate'), 10000),
+                    load_factor=_f(request.POST.get('new_voy_load_factor'), 1.0),
+                    dis_factor=_f(request.POST.get('new_voy_dis_factor'), 1.0),
+                    turntimes_hours=_f(request.POST.get('new_voy_turntimes'), 36),
+                    port_exp=_f(request.POST.get('new_voy_port_exp'), 100000),
+                    various_exp=_f(request.POST.get('new_voy_various_exp'), 10000),
+                )
+                # Create default intake records for all existing vessels
+                default_intake = _f(request.POST.get('new_voy_default_intake'), 79000)
+                for vessel in ComparisonVessel.objects.all():
+                    VesselVoyageIntake.objects.get_or_create(
+                        vessel=vessel, voyage=voy,
+                        defaults={'intake': default_intake},
+                    )
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'edit_voyage':
+            vid = request.POST.get('voyage_id')
+            try:
+                voy = ComparisonVoyage.objects.get(pk=int(vid))
+                voy.name = request.POST.get('edit_voy_name', voy.name).strip() or voy.name
+                voy.ballast_dist = _f(request.POST.get('edit_voy_ballast_dist'), voy.ballast_dist)
+                voy.laden_dist = _f(request.POST.get('edit_voy_laden_dist'), voy.laden_dist)
+                voy.load_rate = _f(request.POST.get('edit_voy_load_rate'), voy.load_rate)
+                voy.dis_rate = _f(request.POST.get('edit_voy_dis_rate'), voy.dis_rate)
+                voy.load_factor = _f(request.POST.get('edit_voy_load_factor'), voy.load_factor)
+                voy.dis_factor = _f(request.POST.get('edit_voy_dis_factor'), voy.dis_factor)
+                voy.turntimes_hours = _f(request.POST.get('edit_voy_turntimes'), voy.turntimes_hours)
+                voy.port_exp = _f(request.POST.get('edit_voy_port_exp'), voy.port_exp)
+                voy.various_exp = _f(request.POST.get('edit_voy_various_exp'), voy.various_exp)
+                voy.save()
+            except (ComparisonVoyage.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'delete_voyage':
+            vid = request.POST.get('voyage_id')
+            try:
+                ComparisonVoyage.objects.get(pk=int(vid)).delete()
+            except (ComparisonVoyage.DoesNotExist, ValueError):
+                pass
             return redirect('voyage:vessel_compare')
 
         elif action == 'add_vessel':
             name = request.POST.get('new_name', '').strip()
             if name:
+                default_intake = _f(request.POST.get('new_default_intake'), 79000)
                 next_order = ComparisonVessel.objects.count()
-                ComparisonVessel.objects.create(
+                vessel = ComparisonVessel.objects.create(
                     name=name, order=next_order,
-                    intake_v1=_f(request.POST.get('new_intake_v1'), 79000),
-                    intake_v2=_f(request.POST.get('new_intake_v2'), 69500),
+                    default_intake=default_intake,
                     laden_speed=_f(request.POST.get('new_laden_speed'), 12),
                     ballast_speed=_f(request.POST.get('new_ballast_speed'), 12.5),
                     laden_cons=_f(request.POST.get('new_laden_cons'), 22),
                     ballast_cons=_f(request.POST.get('new_ballast_cons'), 23),
                     port_cons=_f(request.POST.get('new_port_cons'), 4.5),
                 )
+                # Create intake records for each voyage
+                for voy in ComparisonVoyage.objects.all():
+                    intake_val = _f(request.POST.get(f'new_intake_{voy.id}'), default_intake)
+                    VesselVoyageIntake.objects.get_or_create(
+                        vessel=vessel, voyage=voy,
+                        defaults={'intake': intake_val},
+                    )
             return redirect('voyage:vessel_compare')
 
         elif action == 'edit_vessel':
@@ -1328,14 +1377,20 @@ def vessel_compare(request):
             try:
                 v = ComparisonVessel.objects.get(pk=int(vid))
                 v.name = request.POST.get('edit_name', v.name).strip() or v.name
-                v.intake_v1 = _f(request.POST.get('edit_intake_v1'), v.intake_v1)
-                v.intake_v2 = _f(request.POST.get('edit_intake_v2'), v.intake_v2)
+                v.default_intake = _f(request.POST.get('edit_default_intake'), v.default_intake)
                 v.laden_speed = _f(request.POST.get('edit_laden_speed'), v.laden_speed)
                 v.ballast_speed = _f(request.POST.get('edit_ballast_speed'), v.ballast_speed)
                 v.laden_cons = _f(request.POST.get('edit_laden_cons'), v.laden_cons)
                 v.ballast_cons = _f(request.POST.get('edit_ballast_cons'), v.ballast_cons)
                 v.port_cons = _f(request.POST.get('edit_port_cons'), v.port_cons)
                 v.save()
+                # Update per-voyage intakes
+                for voy in ComparisonVoyage.objects.all():
+                    intake_val = _f(request.POST.get(f'edit_intake_{voy.id}'), v.default_intake)
+                    VesselVoyageIntake.objects.update_or_create(
+                        vessel=v, voyage=voy,
+                        defaults={'intake': intake_val},
+                    )
             except (ComparisonVessel.DoesNotExist, ValueError):
                 pass
             return redirect('voyage:vessel_compare')
@@ -1350,19 +1405,39 @@ def vessel_compare(request):
                 pass
             return redirect('voyage:vessel_compare')
 
+    voyages_qs = ComparisonVoyage.objects.all()
     vessels_qs = ComparisonVessel.objects.all()
+
+    # Build intake lookup for template: {vessel_id: {voyage_id: intake}}
+    intake_map = {}
+    for vi in VesselVoyageIntake.objects.filter(
+        vessel__in=vessels_qs, voyage__in=voyages_qs
+    ).select_related('vessel', 'voyage'):
+        intake_map.setdefault(vi.vessel_id, {})[vi.voyage_id] = vi.intake
+
+    # Enrich vessels with per-voyage intake list for template
+    vessels_with_intakes = []
+    for v in vessels_qs:
+        v_intakes = intake_map.get(v.id, {})
+        vessels_with_intakes.append({
+            'obj': v,
+            'intakes': {voy.id: v_intakes.get(voy.id, v.default_intake) for voy in voyages_qs},
+        })
+
     results = None
     error = None
-    if vessels_qs.exists():
+    if vessels_qs.exists() and voyages_qs.exists():
         try:
-            results = _run_calc(cfg, vessels_qs)
+            results = _run_calc(cfg, voyages_qs, vessels_qs)
         except Exception as exc:
             logger.exception("Error in vessel_compare calculation")
             error = str(exc)
 
     context = {
         'cfg': cfg,
+        'voyages': voyages_qs,
         'vessels': vessels_qs,
+        'vessels_with_intakes': vessels_with_intakes,
         'results': results,
         'error': error,
     }
