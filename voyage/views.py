@@ -28,7 +28,8 @@ from .forms import TCECalculatorForm
 from .calculators import (
     calculate_fuel_and_days,
     calculate_tce,
-    calculate_freight_from_tce
+    calculate_freight_from_tce,
+    calculate_vessel_comparison,
 )
 from bisect import bisect_right
 
@@ -1234,3 +1235,158 @@ def _save_selected_indices(request, session_data, temp_file):
         messages.warning(request, f'{error_count} tables had errors during import.')
 
     return redirect('voyage:upload_pdf_indices')
+
+
+def vessel_compare(request):
+    DEFAULT_VOYAGES = [
+        {
+            'name': 'Abbot Point to VN',
+            'ballast_dist': 3734, 'laden_dist': 4023,
+            'load_rate': 35000, 'dis_rate': 8000,
+            'load_factor': 1.0, 'dis_factor': 1.0,
+            'turntimes_hours': 36,
+            'port_exp': 165000, 'various_exp': 10000,
+            'bki_intake': 79000,
+        },
+        {
+            'name': 'Santos to Qingdao',
+            'ballast_dist': 8975, 'laden_dist': 11443,
+            'load_rate': 8000, 'dis_rate': 8000,
+            'load_factor': 1.35, 'dis_factor': 1.5,
+            'turntimes_hours': 36,
+            'port_exp': 160000, 'various_exp': 10000,
+            'bki_intake': 69500,
+        },
+    ]
+
+    DEFAULT_GLOBAL = {
+        'hire': 23000,
+        'ifo_price': 800,
+        'mgo_price': 1300,
+        'weather_factor': 1.07,
+    }
+
+    results = None
+    error = None
+
+    if request.method == 'POST':
+        try:
+            def _f(key, default=0.0):
+                v = request.POST.get(key, '')
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    return float(default)
+
+            global_inputs = {
+                'hire': _f('hire'),
+                'ifo_price': _f('ifo_price'),
+                'mgo_price': _f('mgo_price'),
+                'weather_factor': _f('weather_factor', 1.07),
+            }
+
+            voyages = []
+            for i in range(2):
+                voyages.append({
+                    'name': request.POST.get(f'v{i}_name', f'Voyage {i+1}'),
+                    'ballast_dist': _f(f'v{i}_ballast_dist'),
+                    'laden_dist': _f(f'v{i}_laden_dist'),
+                    'load_rate': _f(f'v{i}_load_rate'),
+                    'dis_rate': _f(f'v{i}_dis_rate'),
+                    'load_factor': _f(f'v{i}_load_factor', 1.0),
+                    'dis_factor': _f(f'v{i}_dis_factor', 1.0),
+                    'turntimes_hours': _f(f'v{i}_turntimes'),
+                    'port_exp': _f(f'v{i}_port_exp'),
+                    'various_exp': _f(f'v{i}_various_exp'),
+                })
+
+            vessel_names = request.POST.getlist('vessel_name')
+            vessel_count = len(vessel_names)
+
+            vessels = []
+            for j in range(vessel_count):
+                intakes = [_f(f'vessel_{j}_intake_v{i}') for i in range(2)]
+                vessels.append({
+                    'name': vessel_names[j] or f'Vessel {j+1}',
+                    'intakes': intakes,
+                    'laden_speed': _f(f'vessel_{j}_laden_speed'),
+                    'ballast_speed': _f(f'vessel_{j}_ballast_speed'),
+                    'laden_cons': _f(f'vessel_{j}_laden_cons'),
+                    'ballast_cons': _f(f'vessel_{j}_ballast_cons'),
+                    'port_cons': _f(f'vessel_{j}_port_cons'),
+                })
+
+            if not vessels:
+                error = 'Please add at least one vessel (BKI standard).'
+            else:
+                results = calculate_vessel_comparison(global_inputs, voyages, vessels)
+                results['global_inputs'] = global_inputs
+                results['voyages_input'] = voyages
+                results['vessel_summary'] = [
+                    {
+                        'name': name,
+                        'wa': wa,
+                        'pct_delta': (wa - 1) * 100 if wa is not None else None,
+                    }
+                    for name, wa in zip(results['vessels'], results['weighted_avgs'])
+                ]
+
+        except Exception as exc:
+            logger.exception("Error in vessel_compare")
+            error = str(exc)
+
+        form_voyages = []
+        for i in range(2):
+            form_voyages.append({
+                'name': request.POST.get(f'v{i}_name', DEFAULT_VOYAGES[i]['name']),
+                'ballast_dist': request.POST.get(f'v{i}_ballast_dist', DEFAULT_VOYAGES[i]['ballast_dist']),
+                'laden_dist': request.POST.get(f'v{i}_laden_dist', DEFAULT_VOYAGES[i]['laden_dist']),
+                'load_rate': request.POST.get(f'v{i}_load_rate', DEFAULT_VOYAGES[i]['load_rate']),
+                'dis_rate': request.POST.get(f'v{i}_dis_rate', DEFAULT_VOYAGES[i]['dis_rate']),
+                'load_factor': request.POST.get(f'v{i}_load_factor', DEFAULT_VOYAGES[i]['load_factor']),
+                'dis_factor': request.POST.get(f'v{i}_dis_factor', DEFAULT_VOYAGES[i]['dis_factor']),
+                'turntimes_hours': request.POST.get(f'v{i}_turntimes', DEFAULT_VOYAGES[i]['turntimes_hours']),
+                'port_exp': request.POST.get(f'v{i}_port_exp', DEFAULT_VOYAGES[i]['port_exp']),
+                'various_exp': request.POST.get(f'v{i}_various_exp', DEFAULT_VOYAGES[i]['various_exp']),
+                'bki_intake': request.POST.get(f'v{i}_bki_intake', DEFAULT_VOYAGES[i]['bki_intake']),
+            })
+        form_global = {
+            'hire': request.POST.get('hire', DEFAULT_GLOBAL['hire']),
+            'ifo_price': request.POST.get('ifo_price', DEFAULT_GLOBAL['ifo_price']),
+            'mgo_price': request.POST.get('mgo_price', DEFAULT_GLOBAL['mgo_price']),
+            'weather_factor': request.POST.get('weather_factor', DEFAULT_GLOBAL['weather_factor']),
+        }
+
+        vessel_names = request.POST.getlist('vessel_name')
+        form_vessels = []
+        for j in range(len(vessel_names)):
+            form_vessels.append({
+                'name': request.POST.get(f'vessel_{j}_name', ''),
+                'intake_v0': request.POST.get(f'vessel_{j}_intake_v0', ''),
+                'intake_v1': request.POST.get(f'vessel_{j}_intake_v1', ''),
+                'laden_speed': request.POST.get(f'vessel_{j}_laden_speed', ''),
+                'ballast_speed': request.POST.get(f'vessel_{j}_ballast_speed', ''),
+                'laden_cons': request.POST.get(f'vessel_{j}_laden_cons', ''),
+                'ballast_cons': request.POST.get(f'vessel_{j}_ballast_cons', ''),
+                'port_cons': request.POST.get(f'vessel_{j}_port_cons', ''),
+            })
+    else:
+        form_global = DEFAULT_GLOBAL
+        form_voyages = DEFAULT_VOYAGES
+        form_vessels = [
+            {
+                'name': 'BKI',
+                'intake_v0': 79000, 'intake_v1': 69500,
+                'laden_speed': 11.5, 'ballast_speed': 12.5,
+                'laden_cons': 22, 'ballast_cons': 23, 'port_cons': 4.5,
+            }
+        ]
+
+    context = {
+        'form_global': form_global,
+        'form_voyages': form_voyages,
+        'form_vessels': form_vessels,
+        'results': results,
+        'error': error,
+    }
+    return render(request, 'voyage/vessel_compare.html', context)

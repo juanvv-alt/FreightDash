@@ -5,6 +5,7 @@ app_name = 'voyage'
 
 urlpatterns = [
     path('', views.tce_calculator, name='tce_calculator'),
+    path('vessel-compare/', views.vessel_compare, name='vessel_compare'),
     path('freight-matrix/', views.freight_matrix, name='freight_matrix'),
     path('indices/', views.indices_redirect, name='indices'),
     path('indices/custom/', views.indices_custom, name='indices_custom'),
