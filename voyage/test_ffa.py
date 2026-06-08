@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.urls import reverse
 
 
@@ -44,6 +44,8 @@ class FFAParserTestCase(TestCase):
                    if p['label'] == 'Jun' and p['period_type'] == 'monthly')
         self.assertEqual(jun['start_date'], date(2026, 6, 1))
         self.assertEqual(jun['end_date'], date(2026, 6, 30))
+        self.assertEqual(jun['bid'], Decimal('20750'))
+        self.assertEqual(jun['offer'], Decimal('21100'))
 
     def test_quarterly_q3(self):
         q3 = next(p for p in self._parse()['periods'] if p['label'] == 'Q3')
