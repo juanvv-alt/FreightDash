@@ -2069,6 +2069,7 @@ def ffa_valuation_calculate(request):
                 'label': r['label'], 'bid': float(r['bid']),
                 'offer': float(r['offer']), 'days': r['days'],
                 'weight': r['weight'],
+                'contribution': round(float(r['offer']) * r['weight'], 2),
             }
             for r in result.get('breakdown', [])
         ],

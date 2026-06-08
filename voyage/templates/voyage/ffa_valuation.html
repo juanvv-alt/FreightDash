@@ -285,7 +285,7 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
     let lastCalcResult = null;
 
     const CALCULATE_URL = "{% url 'voyage:ffa-valuation-calculate' %}";
-    const FFA_URL = "";  // POST to same URL
+    const FFA_URL = "{% url 'voyage:ffa-valuation' %}";
 
     // ---- DOM refs ----
     const textarea = document.getElementById('ffa-curve-textarea');
@@ -319,11 +319,11 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
     const noVesselsMsg = document.getElementById('no-vessels-msg');
 
     // ---- Debounce ----
-    let debounceTimer = null;
     function debounce(fn, ms) {
+        let timer = null;
         return function (...args) {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => fn.apply(this, args), ms);
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), ms);
         };
     }
 
@@ -406,8 +406,6 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
             saveBtn.style.display = '';
             saveOk.classList.remove('visible');
             savedCurveId = null;
-            // Trigger calculate
-            runCalculate();
         })
         .catch(err => {
             parseError.textContent = 'Parse failed: ' + err.message;
@@ -436,35 +434,32 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
             headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         })
-        .then(r => r.json())
+        .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
         .then(data => {
             if (data.curve_id) {
                 savedCurveId = data.curve_id;
                 saveOk.classList.add('visible');
                 setTimeout(() => saveOk.classList.remove('visible'), 3000);
+                runCalculate();
             }
         })
-        .catch(() => {})
+        .catch(err => { console.error('Save failed:', err); })
         .finally(() => { saveBtn.disabled = false; });
     });
 
     // ---- Calculate ----
     function runCalculate() {
-        if (!savedCurveId && !parsedPeriods) return;
+        if (!savedCurveId) return;
         const deliveryDate = deliveryDateInput.value;
         const periodMonths = parseInt(periodSlider.value, 10);
         const vesselIds = addedVessels.map(v => v.id);
 
         const payload = {
+            curve_id: savedCurveId,
             delivery_date: deliveryDate,
             period_months: periodMonths,
             vessel_ids: vesselIds,
         };
-        if (savedCurveId) {
-            payload.curve_id = savedCurveId;
-        } else if (parsedPeriods) {
-            payload.periods = collectPeriods();
-        }
 
         calcSpin.classList.add('active');
 
@@ -473,12 +468,12 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
             headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         })
-        .then(r => r.json())
+        .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
         .then(data => {
             lastCalcResult = data;
             renderCalcResult(data);
         })
-        .catch(() => {})
+        .catch(err => { console.error('Calculate failed:', err); })
         .finally(() => { calcSpin.classList.remove('active'); });
     }
 
@@ -696,7 +691,7 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
                 offer: parseFloat(row.querySelector('.offer-inp').value),
             });
         });
-        vesselClass = '{{ curve.vessel_class }}';
+        vesselClass = '{{ curve.vessel_class|escapejs }}';
         runCalculate();
     })();
     {% endif %}
