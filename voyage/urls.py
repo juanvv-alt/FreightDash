@@ -10,6 +10,7 @@ urlpatterns = [
     path('indices/', views.indices_redirect, name='indices'),
     path('indices/custom/', views.indices_custom, name='indices_custom'),
     path('indices/<slug:vessel>/', views.indices_dashboard, name='indices_by_vessel'),
+    path('indices/<slug:vessel>/chart-data/', views.indices_chart_data, name='indices_chart_data'),
     path('upload-pdf-indices/', views.upload_pdf_indices, name='upload_pdf_indices'),
     path('verify-pdf-indices/<str:session_id>/', views.verify_pdf_indices, name='verify_pdf_indices'),
 ]

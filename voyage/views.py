@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.db import DatabaseError, ProgrammingError, transaction
 from django.db.models import Max
 from django.db.utils import OperationalError
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -222,6 +222,58 @@ def indices_dashboard(request, vessel):
         'section_label': section_label,
     }
     return render(request, 'voyage/indices_dashboard.html', context)
+
+
+def indices_chart_data(request, vessel):
+    from collections import defaultdict
+    vessel_key = vessel.lower()
+    if vessel_key not in VESSEL_INDEX_GROUPS:
+        return JsonResponse({'error': 'Unknown vessel'}, status=404)
+
+    today = timezone.localdate()
+    default_start = today - timedelta(days=365)
+
+    try:
+        start_date = datetime.strptime(request.GET.get('start', default_start.isoformat()), '%Y-%m-%d').date()
+    except ValueError:
+        start_date = default_start
+
+    try:
+        end_date = datetime.strptime(request.GET.get('end', today.isoformat()), '%Y-%m-%d').date()
+    except ValueError:
+        end_date = today
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    indices_param = request.GET.get('indices', '')
+    requested = [i.strip() for i in indices_param.split(',') if i.strip()] if indices_param else []
+
+    all_vessel_indices = _indices_for_vessel(vessel_key)
+    allowed = set(all_vessel_indices)
+    selected = [i for i in requested if i in allowed] if requested else list(all_vessel_indices)
+
+    if not selected:
+        return JsonResponse({'traces': [], 'indices': []})
+
+    qs = (
+        DailyIndexValue.objects
+        .filter(index__name__in=selected, index__is_active=True, date__gte=start_date, date__lte=end_date)
+        .select_related('index')
+        .order_by('index__name', 'date')
+        .values_list('index__name', 'date', 'value')
+    )
+
+    buckets = defaultdict(lambda: {'x': [], 'y': []})
+    for index_name, date_val, value in qs:
+        buckets[index_name]['x'].append(date_val.isoformat())
+        buckets[index_name]['y'].append(float(value) if value is not None else None)
+
+    traces = [
+        {'name': name, 'x': buckets[name]['x'], 'y': buckets[name]['y']}
+        for name in selected if name in buckets
+    ]
+    return JsonResponse({'traces': traces, 'indices': selected})
 
 
 def indices_custom(request):
