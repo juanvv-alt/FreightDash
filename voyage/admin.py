@@ -689,6 +689,7 @@ from .models import FFACurve, FFACurvePeriod
 class FFACurvePeriodInline(admin.TabularInline):
     model = FFACurvePeriod
     extra = 0
+    can_delete = False
     readonly_fields = ('label', 'period_type', 'start_date', 'end_date', 'bid', 'offer')
 
 
