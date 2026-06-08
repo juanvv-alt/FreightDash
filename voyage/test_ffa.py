@@ -168,3 +168,53 @@ class FFAViewsTestCase(TestCase):
         self.assertIn('curve_id', data)
         self.assertTrue(FFACurve.objects.filter(id=data['curve_id']).exists())
         self.assertEqual(FFACurvePeriod.objects.filter(curve_id=data['curve_id']).count(), 15)
+
+
+from decimal import Decimal as D
+
+
+class FFACalculateTestCase(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        user = User.objects.create_user(username='calcuser', password='testpass')
+        self.client.force_login(user)
+        self.curve = FFACurve.objects.create(vessel_class='Panamax', raw_text='test')
+        for label, ptype, s, e, bid, offer in [
+            ('Q3', 'quarterly', date(2026, 7, 1), date(2026, 9, 30), D('20666'), D('20867')),
+            ('Q4', 'quarterly', date(2026, 10, 1), date(2026, 12, 31), D('19350'), D('19550')),
+            ('Q1', 'quarterly', date(2027, 1, 1), date(2027, 3, 31), D('15000'), D('15150')),
+        ]:
+            FFACurvePeriod.objects.create(
+                curve=self.curve, label=label, period_type=ptype,
+                start_date=s, end_date=e, bid=bid, offer=offer,
+            )
+
+    def _calc(self, payload):
+        return self.client.post(
+            reverse('voyage:ffa-valuation-calculate'),
+            _json.dumps(payload),
+            content_type='application/json',
+        )
+
+    def test_blended_9m_from_jul1(self):
+        r = self._calc({'curve_id': self.curve.id, 'delivery_date': '2026-07-01',
+                        'period_months': 9, 'vessel_ids': []})
+        data = _json.loads(r.content)
+        self.assertIsNone(data['coverage_warning'])
+        # Only quarterly periods in this test curve; blending is day-weighted:
+        # Q3: Jul-Sep = 92 days, Q4: Oct-Dec = 92 days, Q1: Jan-Mar = 90 days (274 total)
+        expected = round((20867 * 92 + 19550 * 92 + 15150 * 90) / 274, 2)
+        self.assertAlmostEqual(data['blended_offer'], float(expected), places=1)
+
+    def test_coverage_warning(self):
+        r = self._calc({'curve_id': self.curve.id, 'delivery_date': '2030-01-01',
+                        'period_months': 3, 'vessel_ids': []})
+        data = _json.loads(r.content)
+        self.assertIsNotNone(data['coverage_warning'])
+        self.assertIsNone(data['blended_offer'])
+
+    def test_timeline_no_combined(self):
+        r = self._calc({'curve_id': self.curve.id, 'delivery_date': '2026-07-01',
+                        'period_months': 3, 'vessel_ids': []})
+        data = _json.loads(r.content)
+        self.assertNotIn('combined', {t['period_type'] for t in data['timeline']})
