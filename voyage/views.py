@@ -12,6 +12,7 @@ from django.db import DatabaseError, ProgrammingError, transaction
 from django.db.models import Max
 from django.db.utils import OperationalError
 from django.http import HttpResponse, JsonResponse
+from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -790,6 +791,7 @@ def tce_calculator(request):
         return render(request, 'voyage/tce_calculator.html', context, status=200)
 
 
+@staff_member_required(login_url='/admin/login/')
 def upload_pdf_indices(request):
     vessel_size_choices = [
         ('capesize', 'Capesize'),
@@ -1348,6 +1350,7 @@ def _parse_excel_spot_rows(upload_file):
     return spot_rows, None
 
 
+@staff_member_required(login_url='/admin/login/')
 def upload_excel_indices(request):
     """Upload the daily Baltic Exchange End-of-Day .xlsx — parse and redirect to mapping review."""
     if request.method == 'POST':
@@ -1373,6 +1376,7 @@ def upload_excel_indices(request):
     return render(request, 'voyage/upload_excel_indices.html', {})
 
 
+@staff_member_required(login_url='/admin/login/')
 def upload_batch_indices(request):
     """Upload a historical columnar indices .xlsx (Date column + one column per index).
 
@@ -1447,6 +1451,7 @@ def upload_batch_indices(request):
     return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
 
 
+@staff_member_required(login_url='/admin/login/')
 def review_excel_mappings(request, session_id):
     """Show / confirm per-code mapping between Excel RateCodes and AvailableIndex entries.
 
@@ -1896,3 +1901,62 @@ def vessel_compare(request):
         'error': error,
     }
     return render(request, 'voyage/vessel_compare.html', context)
+
+
+def ffa_valuation(request):
+    import json as _json
+    from datetime import date as _date
+    from .models import FFACurve, FFACurvePeriod, ComparisonVessel
+    from .ffa_utils import parse_ffa_text
+
+    if request.method == 'POST':
+        ct = request.content_type or ''
+        if 'application/json' in ct:
+            body = _json.loads(request.body)
+        else:
+            body = request.POST
+        action = body.get('action')
+
+        if action == 'parse':
+            result = parse_ffa_text(body.get('raw_text', ''), _date.today())
+            return JsonResponse({
+                'vessel_class': result['vessel_class'],
+                'periods': [
+                    {
+                        'label': p['label'], 'period_type': p['period_type'],
+                        'start_date': p['start_date'].isoformat(),
+                        'end_date': p['end_date'].isoformat(),
+                        'bid': str(p['bid']), 'offer': str(p['offer']),
+                    }
+                    for p in result['periods']
+                ],
+            })
+
+        if action == 'save':
+            raw_text = body.get('raw_text', '')
+            vessel_class = body.get('vessel_class', '')
+            periods_data = body.get('periods', [])
+            if isinstance(periods_data, str):
+                periods_data = _json.loads(periods_data)
+            curve = FFACurve.objects.create(vessel_class=vessel_class, raw_text=raw_text)
+            FFACurvePeriod.objects.bulk_create([
+                FFACurvePeriod(
+                    curve=curve, label=p['label'], period_type=p['period_type'],
+                    start_date=p['start_date'], end_date=p['end_date'],
+                    bid=p['bid'], offer=p['offer'],
+                )
+                for p in periods_data
+            ])
+            return JsonResponse({'curve_id': curve.id, 'status': 'saved'})
+
+    curve = FFACurve.objects.prefetch_related('periods').first()
+    vessels = ComparisonVessel.objects.order_by('name')
+    return render(request, 'voyage/ffa_valuation.html', {
+        'curve': curve,
+        'vessels': vessels,
+        'today': _date.today(),
+    })
+
+
+def ffa_valuation_calculate(request):
+    return JsonResponse({'error': 'not implemented'}, status=501)

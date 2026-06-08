@@ -16,4 +16,6 @@ urlpatterns = [
     path('review-excel-mappings/<str:session_id>/', views.review_excel_mappings, name='review_excel_mappings'),
     path('upload-pdf-indices/', views.upload_pdf_indices, name='upload_pdf_indices'),
     path('verify-pdf-indices/<str:session_id>/', views.verify_pdf_indices, name='verify_pdf_indices'),
+    path('ffa-valuation/', views.ffa_valuation, name='ffa-valuation'),
+    path('ffa-valuation/calculate/', views.ffa_valuation_calculate, name='ffa-valuation-calculate'),
 ]

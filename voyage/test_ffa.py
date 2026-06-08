@@ -123,3 +123,50 @@ class FFABlendingTestCase(TestCase):
     def test_weights_sum_to_one(self):
         r = self._blend(date(2026, 7, 15), 9)
         self.assertAlmostEqual(sum(x['weight'] for x in r['breakdown']), 1.0, places=4)
+
+
+import json as _json
+from django.test import Client
+from django.contrib.auth import get_user_model
+from .models import FFACurve, FFACurvePeriod
+
+
+class FFAViewsTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        user = User.objects.create_user(username='testuser', password='testpass')
+        self.client.force_login(user)
+
+    def test_get_renders(self):
+        r = self.client.get(reverse('voyage:ffa-valuation'))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'ffa-curve-textarea')
+
+    def test_post_parse_returns_periods(self):
+        r = self.client.post(
+            reverse('voyage:ffa-valuation'),
+            {'action': 'parse', 'raw_text': SAMPLE_CURVE},
+        )
+        self.assertEqual(r.status_code, 200)
+        data = _json.loads(r.content)
+        self.assertEqual(data['vessel_class'], 'Panamax')
+        self.assertEqual(len(data['periods']), 15)
+
+    def test_post_save_persists(self):
+        parse_r = self.client.post(
+            reverse('voyage:ffa-valuation'),
+            {'action': 'parse', 'raw_text': SAMPLE_CURVE},
+        )
+        periods = _json.loads(parse_r.content)['periods']
+        save_r = self.client.post(
+            reverse('voyage:ffa-valuation'),
+            _json.dumps({'action': 'save', 'raw_text': SAMPLE_CURVE,
+                         'vessel_class': 'Panamax', 'periods': periods}),
+            content_type='application/json',
+        )
+        self.assertEqual(save_r.status_code, 200)
+        data = _json.loads(save_r.content)
+        self.assertIn('curve_id', data)
+        self.assertTrue(FFACurve.objects.filter(id=data['curve_id']).exists())
+        self.assertEqual(FFACurvePeriod.objects.filter(curve_id=data['curve_id']).count(), 15)
