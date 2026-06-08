@@ -1,0 +1,132 @@
+<h2>Combined: Timeline + Sliders + Results</h2>
+<p class="subtitle">All three elements together — does this layout feel right?</p>
+
+<div class="mockup">
+  <div class="mockup-header">FFA Vessel Valuation — Panamax</div>
+  <div class="mockup-body" style="padding:0;">
+
+    <!-- Controls Row -->
+    <div style="display:flex;gap:16px;align-items:center;padding:14px 16px;background:#181825;border-bottom:1px solid #313244;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="color:#6c7086;font-size:12px;">Delivery</span>
+        <select style="background:#313244;border:1px solid #45475a;color:#cdd6f4;padding:4px 8px;border-radius:4px;font-size:12px;">
+          <option>Jul 2026</option>
+          <option>Aug 2026</option>
+          <option>Sep 2026</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:200px;">
+        <span style="color:#6c7086;font-size:12px;">Period</span>
+        <input type="range" min="1" max="24" value="9" style="flex:1;">
+        <span style="background:#cba6f7;color:#1e1e2e;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:bold;white-space:nowrap;">9 months</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="color:#6c7086;font-size:12px;">Vessel class</span>
+        <select style="background:#313244;border:1px solid #45475a;color:#cdd6f4;padding:4px 8px;border-radius:4px;font-size:12px;">
+          <option>Panamax</option>
+          <option>Capesize</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+
+      <!-- Timeline Bar -->
+      <div>
+        <div style="font-size:11px;color:#6c7086;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Period Coverage — Jul 2026 to Mar 2027</div>
+        <div style="position:relative;height:44px;background:#181825;border-radius:6px;overflow:hidden;display:flex;">
+          <!-- FFA period blocks -->
+          <div style="flex:1;background:#313244;border-right:2px solid #1e1e2e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-size:10px;color:#a6adc8;">Q3 2026</span>
+            <span style="font-size:11px;color:#a6e3a1;font-weight:bold;">20,867</span>
+          </div>
+          <div style="flex:1;background:#313244;border-right:2px solid #1e1e2e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-size:10px;color:#a6adc8;">Q4 2026</span>
+            <span style="font-size:11px;color:#a6e3a1;font-weight:bold;">19,550</span>
+          </div>
+          <div style="flex:1;background:#313244;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-size:10px;color:#a6adc8;">Q1 2027</span>
+            <span style="font-size:11px;color:#a6e3a1;font-weight:bold;">15,150</span>
+          </div>
+          <!-- Employment overlay -->
+          <div style="position:absolute;inset:4px;border:2px solid #cba6f7;border-radius:4px;pointer-events:none;display:flex;align-items:center;justify-content:center;">
+            <span style="background:#cba6f720;padding:0 8px;border-radius:3px;font-size:10px;color:#cba6f7;font-weight:bold;">▶ Employment 9m</span>
+          </div>
+        </div>
+        <div style="font-size:10px;color:#45475a;margin-top:4px;">Periods used: Q3 2026 · Q4 2026 · Q1 2027 — always offer side</div>
+      </div>
+
+      <!-- KPI Strip -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <div style="background:#181825;border:1px solid #313244;border-radius:6px;padding:10px;text-align:center;">
+          <div style="font-size:10px;color:#6c7086;margin-bottom:2px;">Blended FFA</div>
+          <div style="font-size:18px;font-weight:bold;color:#a6e3a1;">$18,522</div>
+          <div style="font-size:9px;color:#45475a;">/day (offer)</div>
+        </div>
+        <div style="background:#181825;border:1px solid #313244;border-radius:6px;padding:10px;text-align:center;">
+          <div style="font-size:10px;color:#6c7086;margin-bottom:2px;">BKI Standard</div>
+          <div style="font-size:18px;font-weight:bold;color:#cdd6f4;">$18,522</div>
+          <div style="font-size:9px;color:#45475a;">100.0%</div>
+        </div>
+        <div style="background:#181825;border:1px solid #313244;border-radius:6px;padding:10px;text-align:center;">
+          <div style="font-size:10px;color:#6c7086;margin-bottom:2px;">Vessel A</div>
+          <div style="font-size:18px;font-weight:bold;color:#a6e3a1;">$19,170</div>
+          <div style="font-size:9px;color:#a6e3a1;">+3.5% vs BKI</div>
+        </div>
+        <div style="background:#181825;border:1px solid #313244;border-radius:6px;padding:10px;text-align:center;">
+          <div style="font-size:10px;color:#6c7086;margin-bottom:2px;">Vessel B</div>
+          <div style="font-size:18px;font-weight:bold;color:#f38ba8;">$18,004</div>
+          <div style="font-size:9px;color:#f38ba8;">−2.8% vs BKI</div>
+        </div>
+      </div>
+
+      <!-- Breakdown Table -->
+      <div>
+        <div style="font-size:11px;color:#6c7086;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">FFA Period Breakdown</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="background:#313244;">
+              <th style="padding:6px 10px;text-align:left;color:#a6adc8;font-weight:500;">Period</th>
+              <th style="padding:6px 10px;text-align:right;color:#a6adc8;font-weight:500;">Bid</th>
+              <th style="padding:6px 10px;text-align:right;color:#a6adc8;font-weight:500;">Offer (used)</th>
+              <th style="padding:6px 10px;text-align:right;color:#a6adc8;font-weight:500;">Weight</th>
+              <th style="padding:6px 10px;text-align:right;color:#a6adc8;font-weight:500;">Contribution</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #313244;">
+              <td style="padding:6px 10px;color:#cdd6f4;">Q3 2026</td>
+              <td style="padding:6px 10px;text-align:right;color:#6c7086;">20,666</td>
+              <td style="padding:6px 10px;text-align:right;color:#a6e3a1;">20,867</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;">3/9</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;">6,956</td>
+            </tr>
+            <tr style="border-bottom:1px solid #313244;">
+              <td style="padding:6px 10px;color:#cdd6f4;">Q4 2026</td>
+              <td style="padding:6px 10px;text-align:right;color:#6c7086;">19,350</td>
+              <td style="padding:6px 10px;text-align:right;color:#a6e3a1;">19,550</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;">3/9</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;">6,517</td>
+            </tr>
+            <tr style="border-bottom:1px solid #45475a;">
+              <td style="padding:6px 10px;color:#cdd6f4;">Q1 2027</td>
+              <td style="padding:6px 10px;text-align:right;color:#6c7086;">15,000</td>
+              <td style="padding:6px 10px;text-align:right;color:#a6e3a1;">15,150</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;">3/9</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;">5,050</td>
+            </tr>
+            <tr style="background:#1e1e2e;">
+              <td colspan="2" style="padding:6px 10px;color:#6c7086;font-style:italic;font-size:11px;">Equal monthly weights</td>
+              <td style="padding:6px 10px;text-align:right;color:#a6e3a1;font-weight:bold;">Blended</td>
+              <td style="padding:6px 10px;text-align:right;color:#cdd6f4;font-weight:bold;">9/9</td>
+              <td style="padding:6px 10px;text-align:right;color:#a6e3a1;font-weight:bold;">$18,522</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;">Does this layout capture what you need? Any sections to add, remove, or rearrange?</p>

@@ -1,0 +1,68 @@
+<h2>How should the FFA curve be entered?</h2>
+<p class="subtitle">This determines how you get curve data into the system each time you open the page</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Paste &amp; Parse</h3>
+      <p>A large text box where you paste the raw curve exactly as received — the system parses it automatically. Quick to enter, no reformatting needed.</p>
+      <div style="margin-top:12px;background:#1e1e2e;border-radius:6px;padding:10px;font-family:monospace;font-size:11px;color:#a6e3a1;">
+        Pmax<br>
+        Balmo 20794 / 21248<br>
+        Jun 20750 / 21100<br>
+        Jul 21200 / 21400<br>
+        Q3 20666 / 20867<br>
+        Q4 19350 / 19550<br>
+        Cal27 15500 / 15650
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Structured Table Entry</h3>
+      <p>A pre-built table with fixed rows for standard periods (Balmo, monthly, quarterly, etc). You type the bid/offer into each row directly.</p>
+      <div style="margin-top:12px;overflow:auto;">
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          <thead><tr style="background:#313244;color:#cdd6f4;">
+            <th style="padding:4px 8px;text-align:left;">Period</th>
+            <th style="padding:4px 8px;">Bid</th>
+            <th style="padding:4px 8px;">Offer</th>
+          </tr></thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #313244;"><td style="padding:4px 8px;color:#a6e3a1;">Balmo</td><td style="padding:4px 8px;text-align:center;"><input style="width:70px;background:#1e1e2e;border:1px solid #45475a;color:#cdd6f4;padding:2px 4px;" value="20794"></td><td style="padding:4px 8px;text-align:center;"><input style="width:70px;background:#1e1e2e;border:1px solid #45475a;color:#cdd6f4;padding:2px 4px;" value="21248"></td></tr>
+            <tr style="border-bottom:1px solid #313244;"><td style="padding:4px 8px;color:#a6e3a1;">Jun</td><td style="padding:4px 8px;text-align:center;"><input style="width:70px;background:#1e1e2e;border:1px solid #45475a;color:#cdd6f4;padding:2px 4px;" value="20750"></td><td style="padding:4px 8px;text-align:center;"><input style="width:70px;background:#1e1e2e;border:1px solid #45475a;color:#cdd6f4;padding:2px 4px;" value="21100"></td></tr>
+            <tr><td style="padding:4px 8px;color:#6c7086;">Q3</td><td style="padding:4px 8px;text-align:center;"><input style="width:70px;background:#1e1e2e;border:1px solid #313244;color:#6c7086;padding:2px 4px;" placeholder="—"></td><td style="padding:4px 8px;text-align:center;"><input style="width:70px;background:#1e1e2e;border:1px solid #313244;color:#6c7086;padding:2px 4px;" placeholder="—"></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Paste → Editable Table</h3>
+      <p>Paste the raw text to auto-parse it, then it renders as an editable table for corrections before calculating. Best of both: fast entry with manual fix-up.</p>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:flex-start;">
+        <div style="flex:1;background:#1e1e2e;border-radius:6px;padding:8px;font-family:monospace;font-size:10px;color:#a6e3a1;">
+          Balmo 20794 / 21248<br>
+          Jul 21200 / 21400<br>
+          Q3 20666 / 20867
+        </div>
+        <div style="color:#cba6f7;font-size:20px;padding-top:10px;">→</div>
+        <div style="flex:1;">
+          <table style="width:100%;font-size:10px;border-collapse:collapse;">
+            <tr style="background:#313244;color:#cdd6f4;"><th style="padding:3px 6px;text-align:left;">Period</th><th style="padding:3px 6px;">Bid</th><th style="padding:3px 6px;">Offer</th></tr>
+            <tr style="border-bottom:1px solid #313244;"><td style="padding:3px 6px;color:#a6e3a1;">Balmo</td><td style="padding:3px 6px;text-align:center;color:#cdd6f4;">20794</td><td style="padding:3px 6px;text-align:center;"><span style="background:#45475a;padding:1px 4px;border-radius:3px;color:#f38ba8;">21248</span></td></tr>
+            <tr style="border-bottom:1px solid #313244;"><td style="padding:3px 6px;color:#a6e3a1;">Jul</td><td style="padding:3px 6px;text-align:center;color:#cdd6f4;">21200</td><td style="padding:3px 6px;text-align:center;color:#cdd6f4;">21400</td></tr>
+            <tr><td style="padding:3px 6px;color:#a6e3a1;">Q3</td><td style="padding:3px 6px;text-align:center;color:#cdd6f4;">20666</td><td style="padding:3px 6px;text-align:center;color:#cdd6f4;">20867</td></tr>
+          </table>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#a6adc8;margin-top:8px;">Click any cell to edit if the parser got it wrong</p>
+    </div>
+  </div>
+</div>

@@ -213,40 +213,83 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # CSRF Settings
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://localhost:3000,http://localhost:8000', cast=Csv())
 
-# Jazzmin (AdminLTE) Configuration - Optimized for performance
+# Jazzmin (AdminLTE) Configuration
 JAZZMIN_SETTINGS = {
     "site_title": "FreightDash Admin",
-    "site_header": "FreightDash Administration",
+    "site_header": "FreightDash",
     "site_brand": "FreightDash",
-    "welcome_sign": "Welcome to FreightDash Admin",
+    "welcome_sign": "Welcome to FreightDash",
     "copyright": "FreightDash © 2026",
-    
-    # Layout
+
     "show_sidebar": True,
-    "navigation_expanded": False,
+    "navigation_expanded": True,
     "show_ui_builder": False,
     "language_chooser": False,
     "search_model": "auth.User",
+
+    "icons": {
+        "auth":                      "fas fa-shield-alt",
+        "auth.user":                 "fas fa-user",
+        "auth.group":                "fas fa-users",
+        "core":                      "fas fa-cog",
+        "core.menuitem":             "fas fa-bars",
+        "voyage.dailyindexvalue":    "fas fa-chart-line",
+        "voyage.availableindex":     "fas fa-list-ol",
+        "voyage.customindexpreset":  "fas fa-bookmark",
+        "voyage.routeparameters":    "fas fa-route",
+        "voyage.vesselprofile":      "fas fa-ship",
+        "voyage.vesselfuelprofile":  "fas fa-gas-pump",
+        "voyage.freightvoyage":      "fas fa-anchor",
+    },
+
+    "order_with_respect_to": [
+        "voyage.dailyindexvalue",
+        "voyage.availableindex",
+        "voyage.customindexpreset",
+        "voyage.routeparameters",
+        "voyage.vesselprofile",
+        "voyage.vesselfuelprofile",
+        "voyage.freightvoyage",
+        "core.menuitem",
+        "auth.user",
+        "auth.group",
+    ],
+
     "custom_links": {
-        "core": [
-            {
-                "name": "Menu Builder",
-                "url": "admin:menu-builder",
-                "icon": "fas fa-bars",
-            }
-        ],
         "voyage": [
             {
-                "name": "Upload Baltic Indices",
+                "name": "Upload: Daily EOD (Excel)",
                 "url": "admin:indices-upload",
-                "icon": "fas fa-file-upload",
+                "icon": "fas fa-file-excel",
+            },
+            {
+                "name": "Upload: Batch History (Excel)",
+                "url": "/upload-batch-indices/",
+                "icon": "fas fa-table",
+            },
+            {
+                "name": "Upload: PDF Report",
+                "url": "/upload-pdf-indices/",
+                "icon": "fas fa-file-pdf",
             },
             {
                 "name": "Indices Display Config",
                 "url": "admin:indices-config",
                 "icon": "fas fa-sliders-h",
             },
-        ]
+        ],
+        "core": [
+            {
+                "name": "Menu Builder",
+                "url": "admin:menu-builder",
+                "icon": "fas fa-pencil-ruler",
+            },
+            {
+                "name": "Database Backup & Restore",
+                "url": "admin:database-tools",
+                "icon": "fas fa-database",
+            },
+        ],
     },
 }
 
