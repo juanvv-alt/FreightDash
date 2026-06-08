@@ -1,7 +1,706 @@
 {% extends 'base.html' %}
-{% block title %}FFA Valuation{% endblock %}
+
+{% block title %}FFA Valuation - FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+.ffa-wrap { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
+
+.page-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+.page-title { font-size: 26px; font-weight: 600; color: #1e3c72; margin: 0; }
+
+/* Card base */
+.ffa-card { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 14px; overflow: hidden; }
+.ffa-card-hdr { padding: 11px 16px; border-bottom: 1px solid #e9ecef; display: flex; align-items: center; gap: 8px; }
+.ffa-card-hdr h6 { margin: 0; font-size: 14px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px; }
+.ffa-card-body { padding: 16px; }
+
+/* Section 1 – Curve entry */
+#ffa-curve-textarea-wrapper { position: relative; }
+#ffa-curve-textarea {
+    width: 100%; min-height: 180px; padding: 10px 12px;
+    border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 13px;
+    resize: vertical; outline: none; transition: border-color .2s;
+}
+#ffa-curve-textarea:focus { border-color: #1e3c72; }
+.curve-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.vessel-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; background: #e8f0fe; color: #1e3c72; }
+.save-ok { display: none; color: #28a745; font-size: 13px; font-weight: 600; }
+.save-ok.visible { display: inline-block; }
+
+/* Period table (editable) */
+#ffa-periods-table-wrap { margin-top: 14px; display: none; overflow-x: auto; }
+table.ffa-periods-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.ffa-periods-tbl th { background: #1e3c72; color: white; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; white-space: nowrap; }
+table.ffa-periods-tbl td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+table.ffa-periods-tbl td input { width: 90px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; text-align: right; }
+table.ffa-periods-tbl td input:focus { outline: none; border-color: #1e3c72; }
+.type-badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #f0f4ff; color: #444; font-weight: 600; }
+
+/* Section 2 – Controls */
+.controls-bar { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 12px 20px; margin-bottom: 14px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.ctrl-field { display: flex; align-items: center; gap: 8px; }
+.ctrl-field label { font-size: 12px; font-weight: 700; color: #666; white-space: nowrap; text-transform: uppercase; }
+.ctrl-field input[type=date] { padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; }
+.ctrl-field input[type=date]:focus { outline: none; border-color: #1e3c72; }
+.ctrl-field input[type=range] { width: 160px; }
+#period-value { font-size: 14px; font-weight: 700; color: #1e3c72; min-width: 30px; }
+
+/* Coverage warning */
+#coverage-warning { display: none; }
+#coverage-warning.visible { display: block; }
+
+/* Section 3 – Timeline + KPI */
+.kpi-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.kpi-card { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 14px 18px; min-width: 160px; flex: 0 0 auto; }
+.kpi-card .kpi-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+.kpi-card .kpi-value { font-size: 22px; font-weight: 700; color: #1e3c72; }
+.kpi-card .kpi-sub { font-size: 11px; color: #999; margin-top: 2px; }
+.kpi-card.kpi-ffa-main { border-top: 3px solid #1e3c72; }
+.kpi-card.kpi-vessel { border-top: 3px solid #28a745; }
+
+/* Gantt timeline */
+#ffa-timeline { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 16px; margin-bottom: 14px; overflow-x: auto; display: none; }
+#ffa-timeline.visible { display: block; }
+.timeline-inner { position: relative; height: 50px; min-width: 400px; background: #f8f9fa; border-radius: 4px; }
+.tl-block { position: absolute; top: 6px; height: 22px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: white; overflow: hidden; white-space: nowrap; padding: 0 4px; cursor: default; }
+.tl-block.monthly { background: #1e3c72; }
+.tl-block.quarterly { background: #2a5298; }
+.tl-block.balmo { background: #17a2b8; }
+.tl-block.calendar_year { background: #6c757d; }
+.tl-block.combined { background: #adb5bd; }
+.tl-employment { position: absolute; top: 32px; height: 10px; border-radius: 2px; background: rgba(40,167,69,0.5); border: 1px solid #28a745; }
+.tl-labels { display: flex; justify-content: space-between; font-size: 10px; color: #999; margin-top: 4px; }
+
+/* Section 4 – Breakdown table */
+table.breakdown-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.breakdown-tbl th { background: #f0f4ff; color: #333; padding: 8px 14px; text-align: right; font-size: 11px; font-weight: 700; border-bottom: 2px solid #c5d0e8; white-space: nowrap; }
+table.breakdown-tbl th:first-child { text-align: left; }
+table.breakdown-tbl td { padding: 7px 14px; border-bottom: 1px solid #f0f0f0; text-align: right; font-size: 13px; }
+table.breakdown-tbl td:first-child { text-align: left; }
+table.breakdown-tbl tfoot td { font-weight: 700; background: #f8f9fa; border-top: 2px solid #c5d0e8; }
+table.breakdown-tbl tfoot td:first-child { text-align: left; }
+.breakdown-placeholder { color: #aaa; text-align: center; padding: 24px; font-size: 13px; }
+
+/* Add vessel */
+.vessel-section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.vessel-section-hdr h6 { margin: 0; font-size: 14px; font-weight: 700; color: #333; }
+.add-vessel-row { display: flex; align-items: center; gap: 8px; }
+.add-vessel-row select { padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; }
+.add-vessel-row select:focus { outline: none; border-color: #1e3c72; }
+
+/* Buttons */
+.btn-primary-sm { padding: 6px 14px; background: #1e3c72; color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-primary-sm:hover { background: #163060; }
+.btn-success-sm { padding: 6px 14px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-success-sm:hover { background: #218838; }
+.btn-remove { background: none; border: none; color: #999; cursor: pointer; font-size: 14px; padding: 0 4px; }
+.btn-remove:hover { color: #cc2200; }
+
+/* Loading spinner */
+.spin { display: none; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #1e3c72; border-radius: 50%; animation: spin .6s linear infinite; }
+.spin.active { display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div id="ffa-curve-textarea-wrapper">
-<textarea id="ffa-curve-textarea" name="ffa-curve-textarea"></textarea>
+<div class="ffa-wrap">
+
+<div class="page-hdr">
+    <h1 class="page-title"><i class="fas fa-chart-line me-2"></i>FFA Valuation</h1>
 </div>
+
+<!-- ===== Section 1: Curve Entry ===== -->
+<div class="ffa-card">
+    <div class="ffa-card-hdr">
+        <h6><i class="fas fa-keyboard"></i>FFA Curve Entry</h6>
+        <span id="vessel-class-badge" class="vessel-badge" style="display:none;">
+            {% if curve %}{{ curve.vessel_class }}{% endif %}
+        </span>
+    </div>
+    <div class="ffa-card-body">
+        <div id="ffa-curve-textarea-wrapper">
+            <textarea id="ffa-curve-textarea" name="ffa-curve-textarea"
+                      placeholder="Paste FFA curve here…&#10;e.g.&#10;Pmax&#10;Balmo 20794 / 21248&#10;Jun 20750 / 21100&#10;Q3 20666 / 20867">{% if curve %}{{ curve.raw_text }}{% endif %}</textarea>
+        </div>
+        <div class="curve-actions">
+            <button type="button" class="btn-primary-sm" id="parse-btn">
+                <i class="fas fa-magic me-1"></i>Parse
+            </button>
+            <button type="button" class="btn-success-sm" id="save-btn" style="display:none;">
+                <i class="fas fa-save me-1"></i>Save Curve
+            </button>
+            <span class="spin" id="parse-spin"></span>
+            <span class="save-ok" id="save-ok"><i class="fas fa-check-circle me-1"></i>Saved</span>
+            <span id="parse-error" style="display:none;color:#dc3545;font-size:13px;"></span>
+        </div>
+
+        <!-- Editable period table (shown after parse) -->
+        <div id="ffa-periods-table-wrap">
+            <table class="ffa-periods-tbl" id="ffa-periods-table">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Type</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th style="text-align:right;">Bid</th>
+                        <th style="text-align:right;">Offer</th>
+                    </tr>
+                </thead>
+                <tbody id="ffa-periods-tbody">
+                    {% if curve %}
+                    {% for p in curve.periods.all %}
+                    <tr data-label="{{ p.label }}" data-type="{{ p.period_type }}"
+                        data-start="{{ p.start_date|date:'Y-m-d' }}" data-end="{{ p.end_date|date:'Y-m-d' }}"
+                        data-bid="{{ p.bid }}" data-offer="{{ p.offer }}">
+                        <td>{{ p.label }}</td>
+                        <td><span class="type-badge">{{ p.period_type }}</span></td>
+                        <td>{{ p.start_date|date:'d M Y' }}</td>
+                        <td>{{ p.end_date|date:'d M Y' }}</td>
+                        <td><input type="number" class="bid-inp" value="{{ p.bid }}" step="1"></td>
+                        <td><input type="number" class="offer-inp" value="{{ p.offer }}" step="1"></td>
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Section 2: Controls Bar ===== -->
+<div class="controls-bar">
+    <div class="ctrl-field">
+        <label for="delivery-date">Delivery Date</label>
+        <input type="date" id="delivery-date" value="{{ today|date:'Y-m-d' }}">
+    </div>
+    <div class="ctrl-field">
+        <label for="period-slider">Period</label>
+        <input type="range" id="period-slider" min="1" max="36" value="12">
+        <span id="period-value">12</span>
+        <span style="font-size:12px;color:#888;">mo</span>
+    </div>
+    <div class="ctrl-field" style="margin-left:auto;">
+        <span class="spin" id="calc-spin"></span>
+    </div>
+</div>
+
+<div id="coverage-warning" class="alert alert-warning mb-3" role="alert">
+    <i class="fas fa-exclamation-triangle me-1"></i>
+    <span id="coverage-warning-text"></span>
+</div>
+
+<!-- ===== Section 3: Timeline + KPI ===== -->
+<div id="ffa-timeline">
+    <div style="font-size:12px;font-weight:700;color:#666;margin-bottom:8px;text-transform:uppercase;">FFA Period Coverage</div>
+    <div class="timeline-inner" id="timeline-inner"></div>
+    <div class="tl-labels" id="tl-labels"></div>
+</div>
+
+<div class="kpi-strip" id="kpi-strip">
+    <div class="kpi-card kpi-ffa-main" id="kpi-ffa">
+        <div class="kpi-label">Blended FFA</div>
+        <div class="kpi-value" id="kpi-ffa-value">—</div>
+        <div class="kpi-sub" id="kpi-ffa-sub">offer ($/day)</div>
+    </div>
+</div>
+
+<!-- Vessel section -->
+<div class="ffa-card">
+    <div class="ffa-card-body">
+        <div class="vessel-section-hdr">
+            <h6><i class="fas fa-ship me-1"></i>Vessel Comparison</h6>
+            <div class="add-vessel-row">
+                <select id="vessel-select">
+                    <option value="">— add vessel —</option>
+                    {% for v in vessels %}
+                    <option value="{{ v.id }}" data-name="{{ v.name }}">{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn-primary-sm" id="add-vessel-btn">
+                    <i class="fas fa-plus me-1"></i>Add
+                </button>
+            </div>
+        </div>
+        <div id="vessel-kpis" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+        <div id="no-vessels-msg" style="color:#aaa;font-size:13px;padding:8px 0;">
+            No vessels added yet. Select a vessel above and click Add.
+        </div>
+    </div>
+</div>
+
+<!-- ===== Section 4: Breakdown Table ===== -->
+<div class="ffa-card">
+    <div class="ffa-card-hdr">
+        <h6><i class="fas fa-table"></i>Period Breakdown</h6>
+    </div>
+    <div class="ffa-card-body" style="padding:0;">
+        <div id="breakdown-wrap">
+            <div class="breakdown-placeholder" id="breakdown-placeholder">
+                Parse a curve and set delivery parameters to see the breakdown.
+            </div>
+            <div style="overflow-x:auto; display:none;" id="breakdown-table-wrap">
+                <table class="breakdown-tbl">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Type</th>
+                            <th style="text-align:right;">Bid</th>
+                            <th style="text-align:right;">Offer (used)</th>
+                            <th style="text-align:right;">Days</th>
+                            <th style="text-align:right;">Weight</th>
+                            <th style="text-align:right;">Contribution</th>
+                        </tr>
+                    </thead>
+                    <tbody id="breakdown-tbody"></tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4">Blended Total</td>
+                            <td id="bd-total-days" style="text-align:right;"></td>
+                            <td style="text-align:right;">100%</td>
+                            <td id="bd-total-offer" style="text-align:right;"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div><!-- /ffa-wrap -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+
+    // ---- State ----
+    let parsedPeriods = null;   // [{label, period_type, start_date, end_date, bid, offer}, ...]
+    let vesselClass = null;
+    let savedCurveId = {% if curve %}{{ curve.id }}{% else %}null{% endif %};
+    let addedVessels = [];      // [{id, name}]
+    let lastCalcResult = null;
+
+    const CALCULATE_URL = "{% url 'voyage:ffa-valuation-calculate' %}";
+    const FFA_URL = "";  // POST to same URL
+
+    // ---- DOM refs ----
+    const textarea = document.getElementById('ffa-curve-textarea');
+    const parseBtn = document.getElementById('parse-btn');
+    const saveBtn = document.getElementById('save-btn');
+    const parseSpin = document.getElementById('parse-spin');
+    const saveOk = document.getElementById('save-ok');
+    const parseError = document.getElementById('parse-error');
+    const periodsWrap = document.getElementById('ffa-periods-table-wrap');
+    const periodsTbody = document.getElementById('ffa-periods-tbody');
+    const vesselBadge = document.getElementById('vessel-class-badge');
+    const deliveryDateInput = document.getElementById('delivery-date');
+    const periodSlider = document.getElementById('period-slider');
+    const periodValue = document.getElementById('period-value');
+    const coverageWarn = document.getElementById('coverage-warning');
+    const coverageWarnText = document.getElementById('coverage-warning-text');
+    const calcSpin = document.getElementById('calc-spin');
+    const kpiFfaValue = document.getElementById('kpi-ffa-value');
+    const kpiFfaSub = document.getElementById('kpi-ffa-sub');
+    const timelineEl = document.getElementById('ffa-timeline');
+    const timelineInner = document.getElementById('timeline-inner');
+    const tlLabels = document.getElementById('tl-labels');
+    const breakdownPlaceholder = document.getElementById('breakdown-placeholder');
+    const breakdownTableWrap = document.getElementById('breakdown-table-wrap');
+    const breakdownTbody = document.getElementById('breakdown-tbody');
+    const bdTotalDays = document.getElementById('bd-total-days');
+    const bdTotalOffer = document.getElementById('bd-total-offer');
+    const vesselSelect = document.getElementById('vessel-select');
+    const addVesselBtn = document.getElementById('add-vessel-btn');
+    const vesselKpis = document.getElementById('vessel-kpis');
+    const noVesselsMsg = document.getElementById('no-vessels-msg');
+
+    // ---- Debounce ----
+    let debounceTimer = null;
+    function debounce(fn, ms) {
+        return function (...args) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => fn.apply(this, args), ms);
+        };
+    }
+
+    // ---- CSRF helper ----
+    function getCsrf() {
+        const cookie = document.cookie.split(';').map(c => c.trim());
+        for (const c of cookie) {
+            if (c.startsWith('csrftoken=')) return c.slice('csrftoken='.length);
+        }
+        return '';
+    }
+
+    // ---- Render period table ----
+    function renderPeriodTable(periods) {
+        periodsTbody.innerHTML = '';
+        for (const p of periods) {
+            const tr = document.createElement('tr');
+            tr.dataset.label = p.label;
+            tr.dataset.type = p.period_type;
+            tr.dataset.start = p.start_date;
+            tr.dataset.end = p.end_date;
+            tr.innerHTML = `
+                <td>${escHtml(p.label)}</td>
+                <td><span class="type-badge">${escHtml(p.period_type)}</span></td>
+                <td>${formatDate(p.start_date)}</td>
+                <td>${formatDate(p.end_date)}</td>
+                <td><input type="number" class="bid-inp" value="${p.bid}" step="1"></td>
+                <td><input type="number" class="offer-inp" value="${p.offer}" step="1"></td>
+            `;
+            periodsTbody.appendChild(tr);
+        }
+        periodsWrap.style.display = '';
+    }
+
+    // ---- Collect current periods from table ----
+    function collectPeriods() {
+        const rows = periodsTbody.querySelectorAll('tr');
+        const result = [];
+        for (const row of rows) {
+            result.push({
+                label: row.dataset.label,
+                period_type: row.dataset.type,
+                start_date: row.dataset.start,
+                end_date: row.dataset.end,
+                bid: parseFloat(row.querySelector('.bid-inp').value) || 0,
+                offer: parseFloat(row.querySelector('.offer-inp').value) || 0,
+            });
+        }
+        return result;
+    }
+
+    // ---- Parse ----
+    parseBtn.addEventListener('click', function () {
+        const rawText = textarea.value.trim();
+        if (!rawText) return;
+        parseError.style.display = 'none';
+        parseSpin.classList.add('active');
+        parseBtn.disabled = true;
+
+        const body = new URLSearchParams({ action: 'parse', raw_text: rawText });
+        fetch(FFA_URL, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                parseError.textContent = data.error;
+                parseError.style.display = '';
+                return;
+            }
+            parsedPeriods = data.periods;
+            vesselClass = data.vessel_class;
+            if (vesselClass) {
+                vesselBadge.textContent = vesselClass;
+                vesselBadge.style.display = '';
+            }
+            renderPeriodTable(parsedPeriods);
+            saveBtn.style.display = '';
+            saveOk.classList.remove('visible');
+            savedCurveId = null;
+            // Trigger calculate
+            runCalculate();
+        })
+        .catch(err => {
+            parseError.textContent = 'Parse failed: ' + err.message;
+            parseError.style.display = '';
+        })
+        .finally(() => {
+            parseSpin.classList.remove('active');
+            parseBtn.disabled = false;
+        });
+    });
+
+    // ---- Save ----
+    saveBtn.addEventListener('click', function () {
+        const rawText = textarea.value.trim();
+        if (!parsedPeriods) return;
+        const periods = collectPeriods();
+        const payload = {
+            action: 'save',
+            raw_text: rawText,
+            vessel_class: vesselClass || '',
+            periods: periods,
+        };
+        saveBtn.disabled = true;
+        fetch(FFA_URL, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.curve_id) {
+                savedCurveId = data.curve_id;
+                saveOk.classList.add('visible');
+                setTimeout(() => saveOk.classList.remove('visible'), 3000);
+            }
+        })
+        .catch(() => {})
+        .finally(() => { saveBtn.disabled = false; });
+    });
+
+    // ---- Calculate ----
+    function runCalculate() {
+        if (!savedCurveId && !parsedPeriods) return;
+        const deliveryDate = deliveryDateInput.value;
+        const periodMonths = parseInt(periodSlider.value, 10);
+        const vesselIds = addedVessels.map(v => v.id);
+
+        const payload = {
+            delivery_date: deliveryDate,
+            period_months: periodMonths,
+            vessel_ids: vesselIds,
+        };
+        if (savedCurveId) {
+            payload.curve_id = savedCurveId;
+        } else if (parsedPeriods) {
+            payload.periods = collectPeriods();
+        }
+
+        calcSpin.classList.add('active');
+
+        fetch(CALCULATE_URL, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCsrf(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+        .then(r => r.json())
+        .then(data => {
+            lastCalcResult = data;
+            renderCalcResult(data);
+        })
+        .catch(() => {})
+        .finally(() => { calcSpin.classList.remove('active'); });
+    }
+
+    const debouncedCalc = debounce(runCalculate, 350);
+
+    deliveryDateInput.addEventListener('change', debouncedCalc);
+    periodSlider.addEventListener('input', function () {
+        periodValue.textContent = this.value;
+        debouncedCalc();
+    });
+
+    // ---- Render calculate result ----
+    function renderCalcResult(data) {
+        // Coverage warning
+        if (data.coverage_warning) {
+            coverageWarnText.textContent = data.coverage_warning;
+            coverageWarn.classList.add('visible');
+        } else {
+            coverageWarn.classList.remove('visible');
+        }
+
+        // KPI blended
+        if (data.blended_offer != null) {
+            kpiFfaValue.textContent = formatNumber(data.blended_offer);
+            kpiFfaSub.textContent = 'blended offer ($/day)';
+        } else {
+            kpiFfaValue.textContent = '—';
+        }
+
+        // Timeline
+        if (data.timeline && data.timeline.length > 0) {
+            renderTimeline(data.timeline, data.delivery_date, data.end_date);
+        }
+
+        // Breakdown table
+        if (data.breakdown && data.breakdown.length > 0) {
+            breakdownPlaceholder.style.display = 'none';
+            breakdownTableWrap.style.display = '';
+            renderBreakdown(data.breakdown, data.blended_offer);
+        } else {
+            breakdownPlaceholder.style.display = '';
+            breakdownTableWrap.style.display = 'none';
+        }
+
+        // Vessel KPIs (if any returned)
+        if (data.vessels) {
+            updateVesselKpis(data.vessels);
+        }
+    }
+
+    // ---- Timeline ----
+    function renderTimeline(periods, deliveryDate, endDate) {
+        timelineEl.classList.add('visible');
+        timelineInner.innerHTML = '';
+        tlLabels.innerHTML = '';
+
+        if (!periods || periods.length === 0) return;
+
+        const allDates = periods.map(p => [new Date(p.start_date), new Date(p.end_date)]).flat();
+        const minDate = allDates.reduce((a, b) => a < b ? a : b);
+        const maxDate = allDates.reduce((a, b) => a > b ? a : b);
+        const span = maxDate - minDate || 1;
+
+        for (const p of periods) {
+            const s = new Date(p.start_date);
+            const e = new Date(p.end_date);
+            const left = ((s - minDate) / span * 100).toFixed(2);
+            const width = Math.max(((e - s) / span * 100), 0.5).toFixed(2);
+            const block = document.createElement('div');
+            block.className = 'tl-block ' + (p.period_type || 'quarterly');
+            block.style.left = left + '%';
+            block.style.width = width + '%';
+            block.title = `${p.label}: ${p.start_date} – ${p.end_date}\nOffer: ${p.offer}`;
+            block.textContent = p.label;
+            timelineInner.appendChild(block);
+        }
+
+        // Employment overlay
+        if (deliveryDate && endDate) {
+            const es = new Date(deliveryDate);
+            const ee = new Date(endDate);
+            const eleft = ((es - minDate) / span * 100).toFixed(2);
+            const ewidth = Math.max(((ee - es) / span * 100), 0.5).toFixed(2);
+            const emp = document.createElement('div');
+            emp.className = 'tl-employment';
+            emp.style.left = eleft + '%';
+            emp.style.width = ewidth + '%';
+            emp.title = `Employment: ${deliveryDate} – ${endDate}`;
+            timelineInner.appendChild(emp);
+        }
+
+        // Labels
+        const startLabel = document.createElement('span');
+        startLabel.textContent = formatDate(minDate.toISOString().slice(0, 10));
+        const endLabel = document.createElement('span');
+        endLabel.textContent = formatDate(maxDate.toISOString().slice(0, 10));
+        tlLabels.appendChild(startLabel);
+        tlLabels.appendChild(endLabel);
+    }
+
+    // ---- Breakdown ----
+    function renderBreakdown(breakdown, blendedOffer) {
+        breakdownTbody.innerHTML = '';
+        let totalDays = 0;
+        for (const row of breakdown) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escHtml(row.label)}</td>
+                <td><span class="type-badge">${escHtml(row.period_type || '')}</span></td>
+                <td>${row.bid != null ? formatNumber(row.bid) : '—'}</td>
+                <td>${row.offer != null ? formatNumber(row.offer) : '—'}</td>
+                <td>${row.days}</td>
+                <td>${row.weight != null ? (row.weight * 100).toFixed(1) + '%' : '—'}</td>
+                <td>${row.contribution != null ? formatNumber(row.contribution) : '—'}</td>
+            `;
+            breakdownTbody.appendChild(tr);
+            totalDays += row.days || 0;
+        }
+        bdTotalDays.textContent = totalDays;
+        bdTotalOffer.textContent = blendedOffer != null ? formatNumber(blendedOffer) : '—';
+    }
+
+    // ---- Vessel KPIs ----
+    addVesselBtn.addEventListener('click', function () {
+        const opt = vesselSelect.options[vesselSelect.selectedIndex];
+        if (!opt || !opt.value) return;
+        const vesselId = parseInt(opt.value, 10);
+        const vesselName = opt.dataset.name || opt.textContent;
+        if (addedVessels.find(v => v.id === vesselId)) return;
+        addedVessels.push({ id: vesselId, name: vesselName });
+        // Remove from dropdown
+        opt.remove();
+        // Add KPI card placeholder
+        addVesselKpiCard(vesselId, vesselName, null);
+        noVesselsMsg.style.display = 'none';
+        // Re-calculate
+        runCalculate();
+    });
+
+    function addVesselKpiCard(id, name, tce) {
+        const card = document.createElement('div');
+        card.className = 'kpi-card kpi-vessel';
+        card.id = 'kpi-vessel-' + id;
+        card.innerHTML = `
+            <div class="kpi-label" style="display:flex;align-items:center;justify-content:space-between;">
+                <span>${escHtml(name)}</span>
+                <button class="btn-remove" title="Remove" data-vid="${id}">&times;</button>
+            </div>
+            <div class="kpi-value" id="kpi-vessel-val-${id}">${tce != null ? formatNumber(tce) : '—'}</div>
+            <div class="kpi-sub">TCE ($/day)</div>
+        `;
+        card.querySelector('.btn-remove').addEventListener('click', function () {
+            removeVessel(id, name);
+        });
+        vesselKpis.appendChild(card);
+    }
+
+    function removeVessel(id, name) {
+        addedVessels = addedVessels.filter(v => v.id !== id);
+        const card = document.getElementById('kpi-vessel-' + id);
+        if (card) card.remove();
+        // Re-add to dropdown
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        opt.dataset.name = name;
+        vesselSelect.appendChild(opt);
+        if (addedVessels.length === 0) noVesselsMsg.style.display = '';
+        runCalculate();
+    }
+
+    function updateVesselKpis(vessels) {
+        for (const v of vessels) {
+            const el = document.getElementById('kpi-vessel-val-' + v.id);
+            if (el) el.textContent = v.tce != null ? formatNumber(v.tce) : '—';
+        }
+    }
+
+    // ---- Helpers ----
+    function escHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatNumber(n) {
+        return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function formatDate(iso) {
+        if (!iso) return '';
+        const parts = iso.split('-');
+        if (parts.length !== 3) return iso;
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return parts[2] + ' ' + months[parseInt(parts[1], 10) - 1] + ' ' + parts[0];
+    }
+
+    // ---- On load: if curve exists, show table and auto-calculate ----
+    {% if curve %}
+    (function initWithCurve() {
+        vesselBadge.style.display = '';
+        periodsWrap.style.display = '';
+        saveBtn.style.display = '';
+        parsedPeriods = [];  // table already populated server-side
+        // Collect existing table rows into parsedPeriods
+        document.querySelectorAll('#ffa-periods-tbody tr').forEach(function(row) {
+            parsedPeriods.push({
+                label: row.dataset.label,
+                period_type: row.dataset.type,
+                start_date: row.dataset.start,
+                end_date: row.dataset.end,
+                bid: parseFloat(row.querySelector('.bid-inp').value),
+                offer: parseFloat(row.querySelector('.offer-inp').value),
+            });
+        });
+        vesselClass = '{{ curve.vessel_class }}';
+        runCalculate();
+    })();
+    {% endif %}
+
+})();
+</script>
 {% endblock %}
