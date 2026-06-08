@@ -681,3 +681,19 @@ def _voyage_admin_urls():
 
 
 admin.site.get_urls = _voyage_admin_urls
+
+
+from .models import FFACurve, FFACurvePeriod
+
+
+class FFACurvePeriodInline(admin.TabularInline):
+    model = FFACurvePeriod
+    extra = 0
+    readonly_fields = ('label', 'period_type', 'start_date', 'end_date', 'bid', 'offer')
+
+
+@admin.register(FFACurve)
+class FFACurveAdmin(admin.ModelAdmin):
+    list_display = ('vessel_class', 'created_at')
+    readonly_fields = ('created_at',)
+    inlines = [FFACurvePeriodInline]

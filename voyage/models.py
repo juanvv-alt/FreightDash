@@ -385,3 +385,38 @@ class VesselVoyageIntake(models.Model):
 
     def __str__(self):
         return f'{self.vessel.name} / {self.voyage.name}: {self.intake} MT'
+
+
+class FFACurve(models.Model):
+    vessel_class = models.CharField(max_length=50)
+    raw_text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.vessel_class} — {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class FFACurvePeriod(models.Model):
+    PERIOD_TYPES = [
+        ('balmo', 'Balance of Month'),
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly'),
+        ('combined', 'Combined'),
+        ('calendar_year', 'Calendar Year'),
+    ]
+    curve = models.ForeignKey(FFACurve, on_delete=models.CASCADE, related_name='periods')
+    label = models.CharField(max_length=20)
+    period_type = models.CharField(max_length=20, choices=PERIOD_TYPES)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    bid = models.DecimalField(max_digits=10, decimal_places=2)
+    offer = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ['start_date']
+
+    def __str__(self):
+        return f"{self.label}: {self.bid}/{self.offer}"
