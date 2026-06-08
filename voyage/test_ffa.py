@@ -91,6 +91,9 @@ class FFABlendingTestCase(TestCase):
         self.assertIsNone(r['coverage_warning'])
         labels = [x['label'] for x in r['breakdown']]
         self.assertIn('Jul', labels)   # monthly beats Q3 for Jul
+        self.assertIn('Aug', labels)
+        self.assertIn('Sep', labels)
+        self.assertNotIn('Q3', labels)
         self.assertIn('Q4', labels)
         self.assertIn('Q1', labels)
         # 31+31+30=92 days monthly, 92 days Q4, 90 days Q1 = 274 total

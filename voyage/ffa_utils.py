@@ -15,6 +15,8 @@ VESSEL_CLASS_MAP = {
     'handy': 'Handysize', 'handysize': 'Handysize',
 }
 
+PERIOD_PRIORITY = {'balmo': 0, 'monthly': 1, 'quarterly': 2, 'calendar_year': 3}
+
 
 def _last_day(year, month):
     return monthrange(year, month)[1]
@@ -177,7 +179,6 @@ def resolve_employment_periods(curve_periods: list, start_date: date, period_mon
     """
     end_date = _add_months(start_date, period_months)
     leaf = [p for p in curve_periods if p['period_type'] != 'combined']
-    PRIORITY = {'balmo': 0, 'monthly': 1, 'quarterly': 2, 'calendar_year': 3}
 
     month_rows = []
     cur = date(start_date.year, start_date.month, 1)
@@ -197,7 +198,7 @@ def resolve_employment_periods(curve_periods: list, start_date: date, period_mon
                 "breakdown": [],
             }
 
-        best = min(covering, key=lambda p: PRIORITY.get(p['period_type'], 99))
+        best = min(covering, key=lambda p: PERIOD_PRIORITY.get(p['period_type'], 99))
         w_start = max(start_date, cur)
         w_end = min(end_date - timedelta(days=1), mend)
         days = (w_end - w_start).days + 1
