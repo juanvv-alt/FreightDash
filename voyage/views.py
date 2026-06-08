@@ -28,7 +28,7 @@ from .models import (
     FreightVoyage,
     VesselFuelConsumption,
 )
-from .ffa_utils import parse_ffa_text
+from .ffa_utils import parse_ffa_text, resolve_employment_periods
 from .forms import TCECalculatorForm
 from .calculators import (
     calculate_fuel_and_days,
@@ -1977,14 +1977,15 @@ def ffa_valuation_calculate(request):
         for p in curve.periods.all()
     ]
 
-    from .ffa_utils import resolve_employment_periods
     result = resolve_employment_periods(curve_periods, delivery_date, period_months)
+    employment_end = result['end_date']
 
     timeline = [
         {
             'label': p['label'], 'offer': float(p['offer']),
             'start': p['start_date'].isoformat(), 'end': p['end_date'].isoformat(),
             'period_type': p['period_type'],
+            'in_window': p['start_date'] < employment_end and p['end_date'] >= delivery_date,
         }
         for p in curve_periods if p['period_type'] != 'combined'
     ]

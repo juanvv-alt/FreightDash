@@ -1,6 +1,6 @@
 import json as _json
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, Decimal as D
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -168,9 +168,6 @@ class FFAViewsTestCase(TestCase):
         self.assertIn('curve_id', data)
         self.assertTrue(FFACurve.objects.filter(id=data['curve_id']).exists())
         self.assertEqual(FFACurvePeriod.objects.filter(curve_id=data['curve_id']).count(), 15)
-
-
-from decimal import Decimal as D
 
 
 class FFACalculateTestCase(TestCase):
