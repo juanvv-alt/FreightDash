@@ -2047,28 +2047,32 @@ def ffa_valuation_calculate(request):
                 for i, (name, wa) in enumerate(
                     zip(vc['vessels'], vc['weighted_avgs'])
                 ):
-                    if i == 0:
-                        continue  # skip BKI baseline
-                    if wa is not None:
-                        vessels_out.append({
-                            'name': name,
-                            'pct': round(wa * 100, 2),
-                            'adjusted_rate': round(blended * wa, 2),
-                        })
+                    vessel_obj = all_v[i]
+                    if vessel_obj.id not in vessel_ids:
+                        continue
+                    if wa is None:
+                        continue
+                    vessels_out.append({
+                        'id': vessel_obj.id,
+                        'name': name,
+                        'pct': round(wa * 100, 2),
+                        'adjusted_rate': round(blended * wa, 2),
+                    })
         except Exception:
             pass  # vessel calc is best-effort; don't let it break the main result
 
     return JsonResponse({
         'blended_offer': (float(result['blended_offer'])
                           if result['blended_offer'] is not None else None),
+        'delivery_date': delivery_date.isoformat(),
         'end_date': result['end_date'].isoformat(),
         'coverage_warning': result.get('coverage_warning'),
         'timeline': timeline,
         'breakdown': [
             {
-                'label': r['label'], 'bid': float(r['bid']),
-                'offer': float(r['offer']), 'days': r['days'],
-                'weight': r['weight'],
+                'label': r['label'], 'period_type': r.get('period_type', ''),
+                'bid': float(r['bid']), 'offer': float(r['offer']),
+                'days': r['days'], 'weight': r['weight'],
                 'contribution': round(float(r['offer']) * r['weight'], 2),
             }
             for r in result.get('breakdown', [])

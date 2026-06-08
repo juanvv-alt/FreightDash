@@ -505,7 +505,7 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
 
         // Timeline
         if (data.timeline && data.timeline.length > 0) {
-            renderTimeline(data.timeline, data.delivery_date, data.end_date);
+            renderTimeline(data.timeline, data.delivery_date || deliveryDateInput.value, data.end_date);
         }
 
         // Breakdown table
@@ -532,14 +532,14 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
 
         if (!periods || periods.length === 0) return;
 
-        const allDates = periods.map(p => [new Date(p.start_date), new Date(p.end_date)]).flat();
+        const allDates = periods.map(p => [new Date(p.start), new Date(p.end)]).flat();
         const minDate = allDates.reduce((a, b) => a < b ? a : b);
         const maxDate = allDates.reduce((a, b) => a > b ? a : b);
         const span = maxDate - minDate || 1;
 
         for (const p of periods) {
-            const s = new Date(p.start_date);
-            const e = new Date(p.end_date);
+            const s = new Date(p.start);
+            const e = new Date(p.end);
             const left = ((s - minDate) / span * 100).toFixed(2);
             const width = Math.max(((e - s) / span * 100), 0.5).toFixed(2);
             const block = document.createElement('div');
@@ -648,7 +648,7 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
     function updateVesselKpis(vessels) {
         for (const v of vessels) {
             const el = document.getElementById('kpi-vessel-val-' + v.id);
-            if (el) el.textContent = v.tce != null ? formatNumber(v.tce) : '—';
+            if (el) el.textContent = v.adjusted_rate != null ? formatNumber(v.adjusted_rate) : '—';
         }
     }
 
