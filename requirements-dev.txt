@@ -1,0 +1,11 @@
+-r requirements.txt
+
+# Testing
+pytest==7.3.1
+pytest-django==4.5.2
+pytest-cov==4.1.0
+
+# Code Quality
+black==23.3.0
+flake8==6.0.0
+isort==5.12.0

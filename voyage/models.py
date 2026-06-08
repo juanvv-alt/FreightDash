@@ -281,3 +281,107 @@ class VoyageFuelSplit(models.Model):
 
     def __str__(self):
         return f"{self.voyage.name} - {self.fuel_index.name} ({self.weight_pct}%)"
+
+
+class IndexCodeMapping(models.Model):
+    """Persistent mapping from an Excel RateCode to an AvailableIndex (or skip flag)."""
+    rate_code = models.CharField(max_length=120, unique=True, help_text='RateCode from Baltic Exchange Excel')
+    target_index = models.ForeignKey(
+        'AvailableIndex',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='code_mappings',
+        help_text='Leave blank to auto-create a new index using the rate code as name',
+    )
+    skip = models.BooleanField(default=False, help_text='Do not import this rate code')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['rate_code']
+        verbose_name = 'Index Code Mapping'
+        verbose_name_plural = 'Index Code Mappings'
+
+    def __str__(self):
+        if self.skip:
+            return f'{self.rate_code} → [skip]'
+        return f'{self.rate_code} → {self.target_index.name if self.target_index else "[auto-create]"}'
+
+
+class VesselCompareConfig(models.Model):
+    """Singleton storing market inputs for the vessel comparison tool."""
+    hire = models.FloatField(default=23000)
+    ifo_price = models.FloatField(default=800)
+    mgo_price = models.FloatField(default=1300)
+    weather_factor = models.FloatField(default=1.07)
+
+    class Meta:
+        verbose_name = 'Vessel Compare Config'
+
+    def __str__(self):
+        return 'Vessel Compare Config'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class ComparisonVoyage(models.Model):
+    """A voyage used in the vessel comparison tool."""
+    name = models.CharField(max_length=160)
+    order = models.PositiveIntegerField(default=0)
+    ballast_dist = models.FloatField(default=5000)
+    laden_dist = models.FloatField(default=5000)
+    load_rate = models.FloatField(default=10000)
+    dis_rate = models.FloatField(default=10000)
+    load_factor = models.FloatField(default=1.0)
+    dis_factor = models.FloatField(default=1.0)
+    turntimes_hours = models.FloatField(default=36)
+    port_exp = models.FloatField(default=100000)
+    various_exp = models.FloatField(default=10000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'created_at']
+        verbose_name = 'Comparison Voyage'
+        verbose_name_plural = 'Comparison Voyages'
+
+    def __str__(self):
+        return self.name
+
+
+class ComparisonVessel(models.Model):
+    """A vessel entry in the vessel comparison tool."""
+    name = models.CharField(max_length=120)
+    order = models.PositiveIntegerField(default=0)
+    is_standard = models.BooleanField(default=False, help_text='BKI reference vessel')
+    default_intake = models.FloatField(default=79000, help_text='Used when no voyage-specific intake is set')
+    laden_speed = models.FloatField(default=12.0)
+    ballast_speed = models.FloatField(default=12.5)
+    laden_cons = models.FloatField(default=22.0)
+    ballast_cons = models.FloatField(default=23.0)
+    port_cons = models.FloatField(default=4.5)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order', 'created_at']
+        verbose_name = 'Comparison Vessel'
+        verbose_name_plural = 'Comparison Vessels'
+
+    def __str__(self):
+        return self.name
+
+
+class VesselVoyageIntake(models.Model):
+    """Intake (MT) for a specific vessel on a specific voyage (varies by draft restriction)."""
+    vessel = models.ForeignKey(ComparisonVessel, on_delete=models.CASCADE, related_name='voyage_intakes')
+    voyage = models.ForeignKey(ComparisonVoyage, on_delete=models.CASCADE, related_name='vessel_intakes')
+    intake = models.FloatField(default=79000)
+
+    class Meta:
+        unique_together = [('vessel', 'voyage')]
+        verbose_name = 'Vessel Voyage Intake'
+
+    def __str__(self):
+        return f'{self.vessel.name} / {self.voyage.name}: {self.intake} MT'

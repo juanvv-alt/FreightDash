@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Review Index Mappings{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h4 class="mb-0"><i class="fas fa-exchange-alt me-2 text-primary"></i>Review Index Mappings</h4>
+      <small class="text-muted">{{ filename }}</small>
+    </div>
+    <div>
+      {% if unmatched > 0 %}
+        <span class="badge bg-warning text-dark me-2">
+          <i class="fas fa-exclamation-triangle me-1"></i>{{ unmatched }} unmatched
+        </span>
+      {% endif %}
+      <span class="badge bg-secondary">{{ total }} codes</span>
+    </div>
+  </div>
+
+  <div class="alert alert-info py-2 small mb-3">
+    <i class="fas fa-info-circle me-1"></i>
+    Map each Excel rate code to a database index. Choices are saved — future uploads will use them automatically.
+    <strong>Unmatched</strong> codes will create a new index using the rate code as name.
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:130px">Rate Code</th>
+              <th>Description</th>
+              {% if session_type != 'batch' %}<th style="width:100px">Date</th>
+              <th style="width:90px" class="text-end">Value</th>{% endif %}
+              <th style="width:320px">Map to DB Index</th>
+              <th style="width:70px" class="text-center">Skip</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in mapping_rows %}
+            <tr class="{% if row.status == 'new' %}table-warning{% elif row.status == 'skip' %}table-secondary{% endif %}"
+                id="row-{{ forloop.counter }}">
+              <td>
+                <code class="fw-bold">{{ row.code }}</code>
+                {% if row.status == 'new' %}
+                  <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem">new</span>
+                {% elif row.status == 'mapped' %}
+                  <span class="badge bg-success ms-1" style="font-size:0.65rem">saved</span>
+                {% elif row.status == 'exact' %}
+                  <span class="badge bg-info ms-1" style="font-size:0.65rem">exact</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ row.description }}</td>
+              {% if session_type != 'batch' %}<td class="small">{{ row.date }}</td>
+              <td class="text-end small">{{ row.value|floatformat:2 }}</td>{% endif %}
+              <td>
+                <select name="target_{{ row.code }}"
+                        class="form-select form-select-sm mapping-select"
+                        data-row="row-{{ forloop.counter }}"
+                        {% if row.status == 'skip' %}disabled{% endif %}>
+                  <option value="">— auto-create as "{{ row.code }}" —</option>
+                  {% regroup all_indices by vessel_size as size_groups %}
+                  {% for group in size_groups %}
+                    <optgroup label="{{ group.grouper|title }}">
+                      {% for idx in group.list %}
+                        <option value="{{ idx.id }}"
+                          {% if row.suggested and row.suggested.id == idx.id %}selected{% endif %}>
+                          {{ idx.name }}
+                        </option>
+                      {% endfor %}
+                    </optgroup>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="text-center">
+                <div class="form-check d-flex justify-content-center">
+                  <input class="form-check-input skip-check"
+                         type="checkbox"
+                         name="action_{{ row.code }}"
+                         value="skip"
+                         data-row="row-{{ forloop.counter }}"
+                         {% if row.status == 'skip' %}checked{% endif %}>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-database me-1"></i>Save mappings &amp; import
+      </button>
+      <a href="{% url 'voyage:upload_excel_indices' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-times me-1"></i>Cancel
+      </a>
+    </div>
+  </form>
+
+</div>
+
+<script>
+// When skip is checked, disable the dropdown and grey the row; uncheck re-enables it
+document.querySelectorAll('.skip-check').forEach(function(chk) {
+  chk.addEventListener('change', function() {
+    var rowId = this.dataset.row;
+    var row = document.getElementById(rowId);
+    var sel = row.querySelector('.mapping-select');
+    if (this.checked) {
+      sel.disabled = true;
+      row.classList.add('table-secondary');
+      row.classList.remove('table-warning');
+    } else {
+      sel.disabled = false;
+      row.classList.remove('table-secondary');
+      // restore warning for 'new' codes
+      if (sel.value === '') {
+        row.classList.add('table-warning');
+      }
+    }
+  });
+});
+
+// When a mapping is selected, remove the 'new' warning highlight
+document.querySelectorAll('.mapping-select').forEach(function(sel) {
+  sel.addEventListener('change', function() {
+    var row = document.getElementById(this.dataset.row);
+    if (this.value !== '') {
+      row.classList.remove('table-warning');
+    } else {
+      // check skip state before re-adding warning
+      var chk = row.querySelector('.skip-check');
+      if (!chk.checked) row.classList.add('table-warning');
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -5,617 +5,401 @@
 
 {% block extra_css %}
 <style>
-    .vc-container {
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 30px 20px;
-    }
+.vc-wrap { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
 
-    .page-title {
-        font-size: 28px;
-        font-weight: 500;
-        color: #333;
-        margin-bottom: 6px;
-    }
+.page-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+.page-title { font-size: 26px; font-weight: 600; color: #1e3c72; margin: 0; }
+.hdr-btns { display: flex; gap: 8px; }
 
-    .page-subtitle {
-        font-size: 14px;
-        color: #777;
-        margin-bottom: 28px;
-    }
+.settings-bar { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 12px 20px; margin-bottom: 14px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.settings-bar .field { display: flex; align-items: center; gap: 8px; }
+.settings-bar label { font-size: 12px; font-weight: 700; color: #666; white-space: nowrap; text-transform: uppercase; }
+.settings-bar input { width: 90px; padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; text-align: right; }
+.settings-bar input:focus { outline: none; border-color: #1e3c72; }
 
-    .card {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
+.vc-card { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 12px; overflow: hidden; }
+.vc-card-hdr { padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+.vc-card-hdr.open { border-bottom: 1px solid #e9ecef; }
+.vc-card-hdr h6 { margin: 0; font-size: 14px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px; }
+.vc-card-hdr .hdr-right { display: flex; align-items: center; gap: 8px; }
+.vc-card-body { padding: 16px 20px; display: none; }
+.vc-card-body.open { display: block; }
+.chevron { transition: transform .2s; color: #999; font-size: 12px; }
+.vc-card-hdr.open .chevron { transform: rotate(180deg); }
 
-    .card-header-custom {
-        padding: 14px 20px;
-        border-bottom: 1px solid #e9ecef;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        cursor: pointer;
-        user-select: none;
-    }
+/* Add panels */
+.add-panel { background: #f8faff; border: 1px solid #c5d0e8; border-radius: 8px; padding: 16px 18px; margin-bottom: 12px; display: none; }
+.add-panel.open { display: block; }
+.add-panel h6 { margin: 0 0 12px; font-size: 14px; font-weight: 700; color: #1e3c72; }
 
-    .card-header-custom h6 {
-        margin: 0;
-        font-size: 15px;
-        font-weight: 600;
-        color: #333;
-    }
+/* Form grids */
+.fg label { display: block; font-size: 11px; font-weight: 700; color: #666; margin-bottom: 3px; text-transform: uppercase; }
+.fg input, .fg select { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; }
+.fg input[type=number] { text-align: right; }
+.fg input:focus { outline: none; border-color: #1e3c72; }
+.fg-row { display: grid; gap: 10px; align-items: end; margin-bottom: 8px; }
+.fg-row-vessel { grid-template-columns: 1.5fr repeat(7, 1fr) auto; }
+.fg-row-voyage { grid-template-columns: 1.5fr repeat(9, 1fr) auto; }
+.fg-row-mktinputs { grid-template-columns: repeat(4, 1fr) auto; }
+.fg-row-intakes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.fg-row-intakes .fg { min-width: 120px; }
 
-    .card-body-custom {
-        padding: 20px;
-    }
+/* Summary table */
+table.sum-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.sum-table th { background: #1e3c72; color: white; padding: 9px 14px; text-align: right; font-size: 12px; font-weight: 600; white-space: nowrap; }
+table.sum-table th:first-child { text-align: left; }
+table.sum-table td { padding: 8px 14px; border-bottom: 1px solid #f0f0f0; text-align: right; }
+table.sum-table td:first-child { text-align: left; font-weight: 500; }
+table.sum-table tr.bki-row td { background: #fffbf0; font-weight: 700; }
+table.sum-table tr:hover td { background: #f8f9fa; }
 
-    .form-grid-4 {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 16px;
-    }
+/* Voyage detail table */
+table.voy-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.voy-table th { background: #f0f4ff; color: #333; padding: 8px 12px; text-align: right; font-size: 11px; font-weight: 700; border-bottom: 2px solid #c5d0e8; white-space: nowrap; }
+table.voy-table th:first-child { text-align: left; }
+table.voy-table td { padding: 7px 12px; border-bottom: 1px solid #f0f0f0; text-align: right; font-size: 12px; }
+table.voy-table td:first-child { text-align: left; font-weight: 500; }
+table.voy-table tr.bki-row td { background: #fffbf0; font-weight: 600; }
 
-    .form-grid-5 {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 16px;
-    }
+.good { color: #1a8a3a; font-weight: 700; }
+.bad  { color: #cc2200; font-weight: 700; }
+.neutral { color: #888; }
 
-    .form-group label {
-        display: block;
-        font-size: 12px;
-        font-weight: 600;
-        color: #555;
-        margin-bottom: 5px;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
+/* Inline edit row */
+.edit-row-form { background: #f0f4ff; padding: 12px 16px; }
 
-    .form-group input {
-        width: 100%;
-        padding: 8px 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-size: 14px;
-        transition: border-color 0.2s;
-    }
+/* Buttons */
+.btn-primary { padding: 7px 18px; background: #1e3c72; color: white; border: none; border-radius: 5px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-primary:hover { background: #163060; }
+.btn-primary-sm { padding: 6px 14px; background: #1e3c72; color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-primary-sm:hover { background: #163060; }
+.btn-success { padding: 7px 18px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-success:hover { background: #218838; }
+.btn-cancel { padding: 6px 12px; background: #e9ecef; color: #555; border: none; border-radius: 5px; font-size: 12px; cursor: pointer; }
+.btn-outline-edit { padding: 3px 10px; background: none; color: #1e3c72; border: 1px solid #1e3c72; border-radius: 4px; font-size: 11px; cursor: pointer; }
+.btn-outline-edit:hover { background: #1e3c72; color: white; }
+.btn-outline-del { padding: 3px 10px; background: none; color: #cc2200; border: 1px solid #cc2200; border-radius: 4px; font-size: 11px; cursor: pointer; }
+.btn-outline-del:hover { background: #cc2200; color: white; }
+.action-btns { display: flex; gap: 4px; justify-content: center; }
 
-    .form-group input:focus {
-        outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 0 2px rgba(0,123,255,0.15);
-    }
+.voy-meta { font-size: 11px; font-weight: 400; color: #888; margin-left: 10px; }
 
-    /* Vessel table */
-    .vessel-table-wrap {
-        overflow-x: auto;
-    }
-
-    table.vessel-input-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-        min-width: 900px;
-    }
-
-    table.vessel-input-table th {
-        background: #f8f9fa;
-        padding: 8px 10px;
-        text-align: center;
-        font-size: 11px;
-        font-weight: 700;
-        color: #555;
-        text-transform: uppercase;
-        border-bottom: 2px solid #dee2e6;
-        border-right: 1px solid #e9ecef;
-        white-space: nowrap;
-    }
-
-    table.vessel-input-table th.group-v1 { background: #e8f4fd; }
-    table.vessel-input-table th.group-v2 { background: #e8f8e8; }
-    table.vessel-input-table th.group-spec { background: #fdf8e8; }
-
-    table.vessel-input-table td {
-        padding: 6px 6px;
-        border-bottom: 1px solid #f0f0f0;
-        border-right: 1px solid #f0f0f0;
-        vertical-align: middle;
-    }
-
-    table.vessel-input-table td.bki-row {
-        background: #fffbf0;
-    }
-
-    table.vessel-input-table input {
-        width: 100%;
-        padding: 5px 7px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 13px;
-        text-align: right;
-    }
-
-    table.vessel-input-table input.name-input {
-        text-align: left;
-        min-width: 120px;
-    }
-
-    table.vessel-input-table input:focus {
-        outline: none;
-        border-color: #007bff;
-    }
-
-    .btn-add-vessel {
-        margin-top: 12px;
-        padding: 7px 16px;
-        background: #28a745;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        font-size: 13px;
-        cursor: pointer;
-    }
-
-    .btn-add-vessel:hover { background: #218838; }
-
-    .btn-remove {
-        padding: 3px 8px;
-        background: #dc3545;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        font-size: 12px;
-        cursor: pointer;
-        line-height: 1.4;
-    }
-
-    .btn-remove:hover { background: #c82333; }
-
-    /* Results */
-    .results-section { margin-top: 30px; }
-
-    table.results-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-
-    table.results-table th {
-        background: #1e3c72;
-        color: white;
-        padding: 10px 12px;
-        text-align: right;
-        font-size: 12px;
-        font-weight: 600;
-        white-space: nowrap;
-    }
-
-    table.results-table th:first-child { text-align: left; }
-
-    table.results-table td {
-        padding: 9px 12px;
-        border-bottom: 1px solid #f0f0f0;
-        text-align: right;
-        font-size: 13px;
-    }
-
-    table.results-table td:first-child { text-align: left; font-weight: 500; }
-
-    table.results-table tr:hover td { background: #f8f9fa; }
-
-    table.results-table tr.bki-row td { background: #fffbf0; font-weight: 600; }
-
-    table.results-table tr.weighted-row td {
-        background: #e8f0fe;
-        font-weight: 700;
-        border-top: 2px solid #1e3c72;
-    }
-
-    .pct-better { color: #28a745; font-weight: 600; }
-    .pct-worse  { color: #dc3545; font-weight: 600; }
-    .pct-bki    { color: #555; }
-
-    .voyage-tab-nav {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 16px;
-        border-bottom: 2px solid #dee2e6;
-        padding-bottom: 0;
-    }
-
-    .voyage-tab-btn {
-        padding: 8px 18px;
-        border: none;
-        background: none;
-        font-size: 14px;
-        font-weight: 600;
-        color: #666;
-        cursor: pointer;
-        border-bottom: 3px solid transparent;
-        margin-bottom: -2px;
-    }
-
-    .voyage-tab-btn.active {
-        color: #007bff;
-        border-bottom-color: #007bff;
-    }
-
-    .voyage-tab-panel { display: none; }
-    .voyage-tab-panel.active { display: block; }
-
-    .submit-bar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-top: 20px;
-    }
-
-    .btn-calculate {
-        padding: 11px 32px;
-        background: #007bff;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
-
-    .btn-calculate:hover { background: #0056b3; }
-
-    .collapse-icon {
-        transition: transform 0.2s;
-        color: #888;
-    }
-
-    .collapsed .collapse-icon { transform: rotate(-90deg); }
-
-    @media (max-width: 768px) {
-        .form-grid-4, .form-grid-5 { grid-template-columns: repeat(2, 1fr); }
-    }
+@media (max-width: 900px) {
+    .fg-row-vessel, .fg-row-voyage { grid-template-columns: 1fr 1fr 1fr; }
+    .fg-row-mktinputs { grid-template-columns: 1fr 1fr; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="vc-container">
-    <div class="page-title">Vessel Compare</div>
-    <div class="page-subtitle">Compare TCE performance of vessels vs. BKI standard across two voyages</div>
+<div class="vc-wrap">
 
-    {% if error %}
-    <div class="alert alert-danger">{{ error }}</div>
-    {% endif %}
+<div class="page-hdr">
+    <h1 class="page-title"><i class="fas fa-ship me-2"></i>Vessel Compare</h1>
+    <div class="hdr-btns">
+        <button class="btn-success" onclick="togglePanel('addVoyPanel')">
+            <i class="fas fa-plus me-1"></i>Add Voyage
+        </button>
+        <button class="btn-primary" onclick="togglePanel('addVesPanel')">
+            <i class="fas fa-plus me-1"></i>Add Vessel
+        </button>
+    </div>
+</div>
 
-    <form method="post" id="compareForm">
+{% if error %}<div class="alert alert-danger mb-3">{{ error }}</div>{% endif %}
+
+<!-- Market Inputs -->
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="update_config">
+    <div class="settings-bar">
+        <div class="field"><label>Hire ($/day)</label><input type="number" name="hire" step="100" value="{{ cfg.hire }}" required></div>
+        <div class="field"><label>IFO ($/MT)</label><input type="number" name="ifo_price" step="1" value="{{ cfg.ifo_price }}" required></div>
+        <div class="field"><label>MGO ($/MT)</label><input type="number" name="mgo_price" step="1" value="{{ cfg.mgo_price }}" required></div>
+        <div class="field"><label>WF</label><input type="number" name="weather_factor" step="0.01" value="{{ cfg.weather_factor }}" required></div>
+        <button type="submit" class="btn-primary-sm">Update</button>
+    </div>
+</form>
+
+<!-- Add Voyage panel -->
+<div class="add-panel" id="addVoyPanel">
+    <h6><i class="fas fa-route me-1"></i>New Voyage</h6>
+    <form method="post">
         {% csrf_token %}
-
-        <!-- Global Inputs -->
-        <div class="card">
-            <div class="card-header-custom" onclick="toggleCard(this)">
-                <h6><i class="fas fa-sliders-h me-2"></i>Market Inputs</h6>
-                <i class="fas fa-chevron-down collapse-icon"></i>
-            </div>
-            <div class="card-body-custom">
-                <div class="form-grid-4">
-                    <div class="form-group">
-                        <label>Hire ($/day)</label>
-                        <input type="number" name="hire" step="100" value="{{ form_global.hire }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>IFO Price ($/MT)</label>
-                        <input type="number" name="ifo_price" step="1" value="{{ form_global.ifo_price }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>MGO Price ($/MT)</label>
-                        <input type="number" name="mgo_price" step="1" value="{{ form_global.mgo_price }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Weather Factor</label>
-                        <input type="number" name="weather_factor" step="0.01" value="{{ form_global.weather_factor }}" required>
-                    </div>
-                </div>
-            </div>
+        <input type="hidden" name="action" value="add_voyage">
+        <div class="fg-row fg-row-voyage">
+            <div class="fg"><label>Name</label><input type="text" name="new_voy_name" placeholder="Voyage name" required></div>
+            <div class="fg"><label>Ballast (nm)</label><input type="number" name="new_voy_ballast_dist" step="1" placeholder="5000"></div>
+            <div class="fg"><label>Laden (nm)</label><input type="number" name="new_voy_laden_dist" step="1" placeholder="5000"></div>
+            <div class="fg"><label>Load Rate</label><input type="number" name="new_voy_load_rate" step="100" placeholder="10000"></div>
+            <div class="fg"><label>Load Factor</label><input type="number" name="new_voy_load_factor" step="0.01" placeholder="1.0"></div>
+            <div class="fg"><label>Dis Rate</label><input type="number" name="new_voy_dis_rate" step="100" placeholder="10000"></div>
+            <div class="fg"><label>Dis Factor</label><input type="number" name="new_voy_dis_factor" step="0.01" placeholder="1.0"></div>
+            <div class="fg"><label>Turntimes (h)</label><input type="number" name="new_voy_turntimes" step="1" placeholder="36"></div>
+            <div class="fg"><label>Port Exp ($)</label><input type="number" name="new_voy_port_exp" step="1000" placeholder="100000"></div>
+            <div class="fg"><label>Various Exp ($)</label><input type="number" name="new_voy_various_exp" step="1000" placeholder="10000"></div>
+            <div class="fg"><label>Default Intake</label><input type="number" name="new_voy_default_intake" step="100" placeholder="79000"></div>
         </div>
-
-        <!-- Voyage Parameters -->
-        <div class="card">
-            <div class="card-header-custom" onclick="toggleCard(this)">
-                <h6><i class="fas fa-route me-2"></i>Voyage Parameters</h6>
-                <i class="fas fa-chevron-down collapse-icon"></i>
-            </div>
-            <div class="card-body-custom">
-                <div class="voyage-tab-nav">
-                    <button type="button" class="voyage-tab-btn active" onclick="showVoyageTab(0, this)">Voyage 1</button>
-                    <button type="button" class="voyage-tab-btn" onclick="showVoyageTab(1, this)">Voyage 2</button>
-                </div>
-
-                {% for voy in form_voyages %}
-                <div class="voyage-tab-panel {% if forloop.first %}active{% endif %}" id="vtab-{{ forloop.counter0 }}">
-                    <div class="form-grid-5" style="margin-bottom:14px;">
-                        <div class="form-group" style="grid-column: span 2;">
-                            <label>Voyage Name</label>
-                            <input type="text" name="v{{ forloop.counter0 }}_name" value="{{ voy.name }}">
-                        </div>
-                        <div class="form-group">
-                            <label>Ballast Distance (nm)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_ballast_dist" step="1" value="{{ voy.ballast_dist }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Laden Distance (nm)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_laden_dist" step="1" value="{{ voy.laden_dist }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Turntimes (hrs)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_turntimes" step="0.5" value="{{ voy.turntimes_hours }}" required>
-                        </div>
-                    </div>
-                    <div class="form-grid-5">
-                        <div class="form-group">
-                            <label>Load Rate (MT/day)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_load_rate" step="100" value="{{ voy.load_rate }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Load Rate Factor</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_load_factor" step="0.01" value="{{ voy.load_factor }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Dis Rate (MT/day)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_dis_rate" step="100" value="{{ voy.dis_rate }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Dis Rate Factor</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_dis_factor" step="0.01" value="{{ voy.dis_factor }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Port Exp ($)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_port_exp" step="1000" value="{{ voy.port_exp }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Various Exp ($)</label>
-                            <input type="number" name="v{{ forloop.counter0 }}_various_exp" step="1000" value="{{ voy.various_exp }}" required>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <!-- Vessel Inputs -->
-        <div class="card">
-            <div class="card-header-custom" onclick="toggleCard(this)">
-                <h6><i class="fas fa-ship me-2"></i>Vessels</h6>
-                <i class="fas fa-chevron-down collapse-icon"></i>
-            </div>
-            <div class="card-body-custom">
-                <div class="vessel-table-wrap">
-                    <table class="vessel-input-table" id="vesselTable">
-                        <thead>
-                            <tr>
-                                <th rowspan="2">Vessel</th>
-                                <th colspan="2" class="group-v1">Intake (MT)</th>
-                                <th colspan="2" class="group-spec">Speed (kn)</th>
-                                <th colspan="3" class="group-spec">Consumption (MT/day)</th>
-                                <th rowspan="2"></th>
-                            </tr>
-                            <tr>
-                                <th class="group-v1">Voyage 1</th>
-                                <th class="group-v2">Voyage 2</th>
-                                <th class="group-spec">Laden</th>
-                                <th class="group-spec">Ballast</th>
-                                <th class="group-spec">Laden</th>
-                                <th class="group-spec">Ballast</th>
-                                <th class="group-spec">Port</th>
-                            </tr>
-                        </thead>
-                        <tbody id="vesselTbody">
-                            {% for v in form_vessels %}
-                            <tr class="{% if forloop.first %}bki-row{% endif %}">
-                                <td>
-                                    <input type="text" name="vessel_name" class="name-input"
-                                           value="{{ v.name }}"
-                                           {% if forloop.first %}placeholder="BKI Standard"{% endif %}>
-                                </td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_intake_v0" step="100" value="{{ v.intake_v0 }}"></td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_intake_v1" step="100" value="{{ v.intake_v1 }}"></td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_laden_speed" step="0.25" value="{{ v.laden_speed }}"></td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_ballast_speed" step="0.25" value="{{ v.ballast_speed }}"></td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_laden_cons" step="0.1" value="{{ v.laden_cons }}"></td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_ballast_cons" step="0.1" value="{{ v.ballast_cons }}"></td>
-                                <td><input type="number" name="vessel_{{ forloop.counter0 }}_port_cons" step="0.1" value="{{ v.port_cons }}"></td>
-                                <td>
-                                    {% if not forloop.first %}
-                                    <button type="button" class="btn-remove" onclick="removeVessel(this)">✕</button>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <button type="button" class="btn-add-vessel" onclick="addVessel()">+ Add Vessel</button>
-            </div>
-        </div>
-
-        <div class="submit-bar">
-            <button type="submit" class="btn-calculate">Calculate</button>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+            <button type="submit" class="btn-success">Save Voyage</button>
+            <button type="button" class="btn-cancel" onclick="togglePanel('addVoyPanel')">Cancel</button>
         </div>
     </form>
+</div>
 
-    <!-- Results -->
-    {% if results %}
-    <div class="results-section">
-        {% for vres in results.voyage_results %}
-        <div class="card">
-            <div class="card-header-custom" style="cursor:default;">
-                <h6><i class="fas fa-calculator me-2"></i>{{ vres.name }}
-                    <span style="font-size:12px;font-weight:400;color:#888;margin-left:12px;">
-                        BKI freight: ${{ vres.bki_freight|floatformat:2 }}/MT &nbsp;|&nbsp; BKI TCE: ${{ vres.bki_tce|floatformat:0 }}/day
-                    </span>
-                </h6>
-            </div>
-            <div class="card-body-custom" style="padding:0;">
-                <div style="overflow-x:auto;">
-                    <table class="results-table">
-                        <thead>
-                            <tr>
-                                <th>Vessel</th>
-                                <th>Intake (MT)</th>
-                                <th>Duration (days)</th>
-                                <th>Hire ($)</th>
-                                <th>IFO Cost ($)</th>
-                                <th>MGO Cost ($)</th>
-                                <th>Total Cost ($)</th>
-                                <th>Freight ($/MT)</th>
-                                <th>TCE ($/day)</th>
-                                <th>vs BKI</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in vres.vessels %}
-                            <tr class="{% if forloop.first %}bki-row{% endif %}">
-                                <td>{{ row.name }}</td>
-                                <td>{{ row.intake|floatformat:0 }}</td>
-                                <td>{{ row.voyage_duration|floatformat:1 }}</td>
-                                <td>{{ row.hire_cost|floatformat:0 }}</td>
-                                <td>{{ row.ifo_cost|floatformat:0 }}</td>
-                                <td>{{ row.mgo_cost|floatformat:0 }}</td>
-                                <td>{{ row.total_cost|floatformat:0 }}</td>
-                                <td>{{ row.freight_nett|floatformat:2 }}</td>
-                                <td>{{ row.tce|floatformat:0 }}</td>
-                                <td>
-                                    {% if forloop.first %}
-                                    <span class="pct-bki">—</span>
-                                    {% elif row.pct_vs_bki != None %}
-                                        {% if row.pct_vs_bki >= 1 %}
-                                        <span class="pct-better">{{ row.pct_vs_bki|floatformat:3 }}x</span>
-                                        {% else %}
-                                        <span class="pct-worse">{{ row.pct_vs_bki|floatformat:3 }}x</span>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<!-- Add Vessel panel -->
+<div class="add-panel" id="addVesPanel">
+    <h6><i class="fas fa-ship me-1"></i>New Vessel</h6>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_vessel">
+        <div class="fg-row fg-row-vessel">
+            <div class="fg"><label>Name</label><input type="text" name="new_name" placeholder="Vessel name" required></div>
+            <div class="fg"><label>Default Intake</label><input type="number" name="new_default_intake" step="100" placeholder="79000"></div>
+            <div class="fg"><label>Speed L (kn)</label><input type="number" name="new_laden_speed" step="0.25" placeholder="12"></div>
+            <div class="fg"><label>Speed B (kn)</label><input type="number" name="new_ballast_speed" step="0.25" placeholder="12.5"></div>
+            <div class="fg"><label>Cons L</label><input type="number" name="new_laden_cons" step="0.1" placeholder="22"></div>
+            <div class="fg"><label>Cons B</label><input type="number" name="new_ballast_cons" step="0.1" placeholder="23"></div>
+            <div class="fg"><label>Cons Port</label><input type="number" name="new_port_cons" step="0.1" placeholder="4.5"></div>
+            <div></div>
         </div>
-        {% endfor %}
+        {% if voyages %}
+        <div class="fg-row-intakes">
+            {% for voy in voyages %}
+            <div class="fg"><label>Intake — {{ voy.name }}</label><input type="number" name="new_intake_{{ voy.id }}" step="100" placeholder="79000"></div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div style="display:flex;gap:8px;margin-top:10px;">
+            <button type="submit" class="btn-primary">Save Vessel</button>
+            <button type="button" class="btn-cancel" onclick="togglePanel('addVesPanel')">Cancel</button>
+        </div>
+    </form>
+</div>
 
-        <!-- Weighted Average Summary -->
-        <div class="card">
-            <div class="card-header-custom" style="cursor:default;">
-                <h6><i class="fas fa-balance-scale me-2"></i>Weighted Average vs BKI (by voyage duration)</h6>
-            </div>
-            <div class="card-body-custom" style="padding:0;">
-                <div style="overflow-x:auto;">
-                    <table class="results-table">
-                        <thead>
-                            <tr>
-                                <th>Vessel</th>
-                                <th>Weighted Avg vs BKI</th>
-                                <th>Δ vs BKI</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in results.vessel_summary %}
-                            <tr class="{% if forloop.first %}bki-row weighted-row{% else %}weighted-row{% endif %}">
-                                <td>{{ row.name }}</td>
-                                <td>
-                                    {% if row.wa != None %}{{ row.wa|floatformat:3 }}x{% else %}—{% endif %}
-                                </td>
-                                <td>
-                                    {% if forloop.first %}
-                                        <span class="pct-bki">—</span>
-                                    {% elif row.pct_delta != None %}
-                                        {% if row.pct_delta >= 0 %}
-                                        <span class="pct-better">+{{ row.pct_delta|floatformat:1 }}%</span>
-                                        {% else %}
-                                        <span class="pct-worse">{{ row.pct_delta|floatformat:1 }}%</span>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+{% if results %}
+<!-- Weighted Average Summary -->
+<div class="vc-card">
+    <div class="vc-card-hdr open" onclick="toggleCard(this)">
+        <h6><i class="fas fa-balance-scale"></i>Weighted Average vs BKI</h6>
+        <i class="fas fa-chevron-down chevron"></i>
+    </div>
+    <div class="vc-card-body open" style="padding:0;">
+        <div style="overflow-x:auto;">
+            <table class="sum-table">
+                <thead>
+                    <tr>
+                        <th>Vessel</th>
+                        <th>% vs BKI</th>
+                        <th>Δ vs BKI</th>
+                        <th style="text-align:center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results.vessel_summary %}
+                    {% for vwi in vessels_with_intakes %}{% if vwi.obj.name == row.name %}
+                    <tr class="{% if forloop.parentloop.first %}bki-row{% endif %}">
+                        <td>{{ row.name }}</td>
+                        <td>
+                            {% if row.pct != None %}
+                                {% if row.pct >= 100 %}<span class="good">{{ row.pct|floatformat:1 }}%</span>
+                                {% else %}<span class="bad">{{ row.pct|floatformat:1 }}%</span>{% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            {% if forloop.parentloop.first %}<span class="neutral">—</span>
+                            {% elif row.pct_delta != None %}
+                                {% if row.pct_delta >= 0 %}<span class="good">+{{ row.pct_delta|floatformat:1 }}%</span>
+                                {% else %}<span class="bad">{{ row.pct_delta|floatformat:1 }}%</span>{% endif %}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn-outline-edit" onclick="toggleEdit('ves-{{ vwi.obj.id }}')">Edit</button>
+                                {% if not vwi.obj.is_standard %}
+                                <form method="post" style="display:inline;" onsubmit="return confirm('Delete {{ vwi.obj.name }}?')">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_vessel">
+                                    <input type="hidden" name="vessel_id" value="{{ vwi.obj.id }}">
+                                    <button type="submit" class="btn-outline-del">Delete</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    <!-- Edit row -->
+                    <tr id="ves-{{ vwi.obj.id }}" style="display:none;">
+                        <td colspan="4" style="padding:0;">
+                            <div class="edit-row-form">
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="edit_vessel">
+                                    <input type="hidden" name="vessel_id" value="{{ vwi.obj.id }}">
+                                    <div class="fg-row fg-row-vessel">
+                                        <div class="fg"><label>Name</label><input type="text" name="edit_name" value="{{ vwi.obj.name }}"></div>
+                                        <div class="fg"><label>Default Intake</label><input type="number" name="edit_default_intake" step="100" value="{{ vwi.obj.default_intake }}"></div>
+                                        <div class="fg"><label>Speed L</label><input type="number" name="edit_laden_speed" step="0.25" value="{{ vwi.obj.laden_speed }}"></div>
+                                        <div class="fg"><label>Speed B</label><input type="number" name="edit_ballast_speed" step="0.25" value="{{ vwi.obj.ballast_speed }}"></div>
+                                        <div class="fg"><label>Cons L</label><input type="number" name="edit_laden_cons" step="0.1" value="{{ vwi.obj.laden_cons }}"></div>
+                                        <div class="fg"><label>Cons B</label><input type="number" name="edit_ballast_cons" step="0.1" value="{{ vwi.obj.ballast_cons }}"></div>
+                                        <div class="fg"><label>Cons Port</label><input type="number" name="edit_port_cons" step="0.1" value="{{ vwi.obj.port_cons }}"></div>
+                                        <div></div>
+                                    </div>
+                                    <div class="fg-row-intakes" id="intakes-{{ vwi.obj.id }}">
+                                        {% for voy in voyages %}
+                                        <div class="fg">
+                                            <label>Intake — {{ voy.name }}</label>
+                                            <input type="number" name="edit_intake_{{ voy.id }}" step="100"
+                                                   value="" class="intake-field"
+                                                   data-vessel="{{ vwi.obj.id }}" data-voyage="{{ voy.id }}">
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <div style="display:flex;gap:8px;margin-top:10px;">
+                                        <button type="submit" class="btn-primary-sm">Save</button>
+                                        <button type="button" class="btn-cancel" onclick="toggleEdit('ves-{{ vwi.obj.id }}')">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}{% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-    {% endif %}
+</div>
+
+<!-- Per-voyage results -->
+{% for vres in results.voyage_results %}
+{% for voy in voyages %}{% if voy.name == vres.name %}
+<div class="vc-card">
+    <div class="vc-card-hdr" onclick="toggleCard(this)">
+        <h6>
+            <i class="fas fa-route"></i>{{ vres.name }}
+            <span class="voy-meta">Freight ${{ vres.bki_freight|floatformat:2 }}/MT · BKI TCE ${{ vres.bki_tce|floatformat:0 }}/day</span>
+        </h6>
+        <div class="hdr-right" onclick="event.stopPropagation()">
+            <button class="btn-outline-edit" onclick="toggleEdit('voy-{{ voy.id }}')">Edit</button>
+            <form method="post" style="display:inline;" onsubmit="return confirm('Delete voyage {{ voy.name }}?')">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_voyage">
+                <input type="hidden" name="voyage_id" value="{{ voy.id }}">
+                <button type="submit" class="btn-outline-del">Delete</button>
+            </form>
+            <i class="fas fa-chevron-down chevron"></i>
+        </div>
+    </div>
+    <!-- Voyage edit form (hidden) -->
+    <div id="voy-{{ voy.id }}" style="display:none;border-bottom:1px solid #e9ecef;">
+        <div class="edit-row-form">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="edit_voyage">
+                <input type="hidden" name="voyage_id" value="{{ voy.id }}">
+                <div class="fg-row fg-row-voyage">
+                    <div class="fg"><label>Name</label><input type="text" name="edit_voy_name" value="{{ voy.name }}"></div>
+                    <div class="fg"><label>Ballast (nm)</label><input type="number" name="edit_voy_ballast_dist" step="1" value="{{ voy.ballast_dist }}"></div>
+                    <div class="fg"><label>Laden (nm)</label><input type="number" name="edit_voy_laden_dist" step="1" value="{{ voy.laden_dist }}"></div>
+                    <div class="fg"><label>Load Rate</label><input type="number" name="edit_voy_load_rate" step="100" value="{{ voy.load_rate }}"></div>
+                    <div class="fg"><label>Load Factor</label><input type="number" name="edit_voy_load_factor" step="0.01" value="{{ voy.load_factor }}"></div>
+                    <div class="fg"><label>Dis Rate</label><input type="number" name="edit_voy_dis_rate" step="100" value="{{ voy.dis_rate }}"></div>
+                    <div class="fg"><label>Dis Factor</label><input type="number" name="edit_voy_dis_factor" step="0.01" value="{{ voy.dis_factor }}"></div>
+                    <div class="fg"><label>Turntimes (h)</label><input type="number" name="edit_voy_turntimes" step="1" value="{{ voy.turntimes_hours }}"></div>
+                    <div class="fg"><label>Port Exp ($)</label><input type="number" name="edit_voy_port_exp" step="1000" value="{{ voy.port_exp }}"></div>
+                    <div class="fg"><label>Various ($)</label><input type="number" name="edit_voy_various_exp" step="1000" value="{{ voy.various_exp }}"></div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button type="submit" class="btn-primary-sm">Save</button>
+                    <button type="button" class="btn-cancel" onclick="toggleEdit('voy-{{ voy.id }}')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="vc-card-body" style="padding:0;">
+        <div style="overflow-x:auto;">
+            <table class="voy-table">
+                <thead>
+                    <tr>
+                        <th>Vessel</th><th>Intake (MT)</th><th>Duration (d)</th>
+                        <th>Hire ($)</th><th>IFO ($)</th><th>MGO ($)</th>
+                        <th>Total Cost ($)</th><th>Freight ($/MT)</th>
+                        <th>TCE ($/d)</th><th>vs BKI</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in vres.vessels %}
+                    <tr class="{% if forloop.first %}bki-row{% endif %}">
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.intake|floatformat:0 }}</td>
+                        <td>{{ row.voyage_duration|floatformat:1 }}</td>
+                        <td>{{ row.hire_cost|floatformat:0 }}</td>
+                        <td>{{ row.ifo_cost|floatformat:0 }}</td>
+                        <td>{{ row.mgo_cost|floatformat:0 }}</td>
+                        <td>{{ row.total_cost|floatformat:0 }}</td>
+                        <td>{{ row.freight_nett|floatformat:2 }}</td>
+                        <td>{{ row.tce|floatformat:0 }}</td>
+                        <td>
+                            {% if forloop.first %}<span class="neutral">—</span>
+                            {% elif row.pct_vs_bki != None %}
+                                {% if row.pct_vs_bki >= 1 %}<span class="good">{{ row.pct_vs_bki|floatformat:3 }}x</span>
+                                {% else %}<span class="bad">{{ row.pct_vs_bki|floatformat:3 }}x</span>{% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}{% endfor %}
+{% endfor %}
+{% else %}
+<div class="vc-card"><div class="vc-card-body open" style="color:#888;text-align:center;padding:30px;">
+    {% if not voyages %}No voyages configured. Click <strong>Add Voyage</strong> to get started.
+    {% elif not vessels %}No vessels configured.
+    {% else %}Unable to calculate results.{% endif %}
+</div></div>
+{% endif %}
+
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    // Track vessel count for field naming
-    let vesselCount = {{ form_vessels|length }};
+// Intake data: {vessel_id: {voyage_id: intake}}
+const INTAKES = {
+    {% for vwi in vessels_with_intakes %}
+    "{{ vwi.obj.id }}": {
+        {% for voy_id, intake in vwi.intakes.items %}
+        "{{ voy_id }}": {{ intake }},
+        {% endfor %}
+    },
+    {% endfor %}
+};
 
-    function addVessel() {
-        const tbody = document.getElementById('vesselTbody');
-        const idx = vesselCount;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><input type="text" name="vessel_name" class="name-input" placeholder="Vessel name"></td>
-            <td><input type="number" name="vessel_${idx}_intake_v0" step="100" placeholder="79000"></td>
-            <td><input type="number" name="vessel_${idx}_intake_v1" step="100" placeholder="69500"></td>
-            <td><input type="number" name="vessel_${idx}_laden_speed" step="0.25" placeholder="12"></td>
-            <td><input type="number" name="vessel_${idx}_ballast_speed" step="0.25" placeholder="12.5"></td>
-            <td><input type="number" name="vessel_${idx}_laden_cons" step="0.1" placeholder="22"></td>
-            <td><input type="number" name="vessel_${idx}_ballast_cons" step="0.1" placeholder="23"></td>
-            <td><input type="number" name="vessel_${idx}_port_cons" step="0.1" placeholder="4.5"></td>
-            <td><button type="button" class="btn-remove" onclick="removeVessel(this)">✕</button></td>
-        `;
-        tbody.appendChild(tr);
-        vesselCount++;
-        renumberVessels();
-    }
-
-    function removeVessel(btn) {
-        btn.closest('tr').remove();
-        renumberVessels();
-    }
-
-    function renumberVessels() {
-        const rows = document.querySelectorAll('#vesselTbody tr');
-        rows.forEach((row, idx) => {
-            const inputs = row.querySelectorAll('input[name^="vessel_"]');
-            inputs.forEach(inp => {
-                inp.name = inp.name.replace(/vessel_\d+_/, `vessel_${idx}_`);
-            });
+function toggleCard(hdr) {
+    hdr.classList.toggle('open');
+    hdr.nextElementSibling.classList.toggle('open');
+}
+function togglePanel(id) {
+    document.getElementById(id).classList.toggle('open');
+}
+function toggleEdit(id) {
+    const el = document.getElementById(id);
+    const showing = el.style.display !== 'none';
+    el.style.display = showing ? 'none' : '';
+    // Populate intake fields when opening
+    if (!showing) {
+        el.querySelectorAll('.intake-field').forEach(inp => {
+            const vid = inp.dataset.vessel;
+            const voyid = inp.dataset.voyage;
+            const val = (INTAKES[vid] || {})[voyid];
+            if (val !== undefined) inp.value = val;
         });
-        vesselCount = rows.length;
     }
-
-    function showVoyageTab(idx, btn) {
-        document.querySelectorAll('.voyage-tab-panel').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.voyage-tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('vtab-' + idx).classList.add('active');
-        btn.classList.add('active');
-    }
-
-    function toggleCard(header) {
-        const body = header.nextElementSibling;
-        const icon = header.querySelector('.collapse-icon');
-        if (body.style.display === 'none') {
-            body.style.display = '';
-            header.classList.remove('collapsed');
-        } else {
-            body.style.display = 'none';
-            header.classList.add('collapsed');
-        }
-    }
-
-    // Scroll to results after calculation
-    {% if results %}
-    document.addEventListener('DOMContentLoaded', () => {
-        const el = document.querySelector('.results-section');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    {% endif %}
+}
 </script>
 {% endblock %}

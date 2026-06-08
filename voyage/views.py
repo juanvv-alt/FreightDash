@@ -1289,155 +1289,609 @@ def _save_selected_indices(request, session_data, temp_file):
     return redirect('voyage:upload_pdf_indices')
 
 
-def vessel_compare(request):
-    DEFAULT_VOYAGES = [
-        {
-            'name': 'Abbot Point to VN',
-            'ballast_dist': 3734, 'laden_dist': 4023,
-            'load_rate': 35000, 'dis_rate': 8000,
-            'load_factor': 1.0, 'dis_factor': 1.0,
-            'turntimes_hours': 36,
-            'port_exp': 165000, 'various_exp': 10000,
-            'bki_intake': 79000,
-        },
-        {
-            'name': 'Santos to Qingdao',
-            'ballast_dist': 8975, 'laden_dist': 11443,
-            'load_rate': 8000, 'dis_rate': 8000,
-            'load_factor': 1.35, 'dis_factor': 1.5,
-            'turntimes_hours': 36,
-            'port_exp': 160000, 'various_exp': 10000,
-            'bki_intake': 69500,
-        },
+def _rate_code_vessel_size(code):
+    c = (code or '').upper().strip()
+    if c.startswith('HS'):
+        return 'handysize'
+    if c.startswith('C') or c.startswith('BCI'):
+        return 'capesize'
+    if c.startswith('P') or c.startswith('BPI'):
+        return 'panamax'
+    if c.startswith('S') or c.startswith('BSI'):
+        return 'supramax'
+    return 'panamax'
+
+
+def _parse_excel_spot_rows(upload_file):
+    """Parse the Baltic tab of an uploaded .xlsx and return (spot_rows, error_msg).
+
+    spot_rows is a list of dicts: {code, description, date (date obj), value (float)}.
+    Returns (None, error_msg) on failure.
+    """
+    import openpyxl
+    try:
+        wb = openpyxl.load_workbook(upload_file, read_only=True, data_only=True)
+    except Exception as exc:
+        return None, f'Could not open file: {exc}'
+
+    if 'Baltic' not in wb.sheetnames:
+        return None, "No 'Baltic' sheet found in this workbook."
+
+    ws = wb['Baltic']
+    spot_rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if len(row) < 5:
+            continue
+        rate_code, desc, period, rate_date, value = row[0], row[1], row[2], row[3], row[4]
+        if period != 'Spot':
+            continue
+        if not rate_code or value is None:
+            continue
+        if isinstance(rate_date, datetime):
+            rate_date = rate_date.date()
+        elif isinstance(rate_date, str):
+            rate_date = _parse_date(rate_date)
+        if not rate_date:
+            continue
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        spot_rows.append({
+            'code': str(rate_code).strip(),
+            'description': str(desc).strip() if desc else '',
+            'date': rate_date.isoformat(),
+            'value': value,
+        })
+    if not spot_rows:
+        return None, 'No Spot rows found in the Baltic sheet.'
+    return spot_rows, None
+
+
+def upload_excel_indices(request):
+    """Upload the daily Baltic Exchange End-of-Day .xlsx — parse and redirect to mapping review."""
+    if request.method == 'POST':
+        upload_file = request.FILES.get('upload_file')
+        if not upload_file:
+            messages.error(request, 'Please select an .xlsx file.')
+            return render(request, 'voyage/upload_excel_indices.html', {})
+
+        spot_rows, err = _parse_excel_spot_rows(upload_file)
+        if err:
+            messages.error(request, err)
+            return render(request, 'voyage/upload_excel_indices.html', {})
+
+        session_id = str(uuid.uuid4())
+        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_file = os.path.join(temp_dir, f'{session_id}.json')
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump({'filename': upload_file.name, 'rows': spot_rows}, f)
+
+        return redirect('voyage:review_excel_mappings', session_id=session_id)
+
+    return render(request, 'voyage/upload_excel_indices.html', {})
+
+
+def upload_batch_indices(request):
+    """Upload a historical columnar indices .xlsx (Date column + one column per index).
+
+    Only reads the header row during the upload request — the full file is saved to
+    disk and processed during the confirm step to avoid request timeouts on large files.
+    """
+    VESSEL_CHOICES = [
+        ('panamax', 'Panamax'),
+        ('capesize', 'Capesize'),
+        ('supramax', 'Supramax'),
+        ('handysize', 'Handysize'),
+        ('bunker', 'Bunker'),
     ]
 
-    DEFAULT_GLOBAL = {
-        'hire': 23000,
-        'ifo_price': 800,
-        'mgo_price': 1300,
-        'weather_factor': 1.07,
+    if request.method == 'POST':
+        import openpyxl
+        upload_file = request.FILES.get('upload_file')
+        vessel_size = request.POST.get('vessel_size', 'panamax')
+        if vessel_size not in dict(VESSEL_CHOICES):
+            vessel_size = 'panamax'
+
+        if not upload_file:
+            messages.error(request, 'Please select an .xlsx file.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+        os.makedirs(temp_dir, exist_ok=True)
+        session_id = str(uuid.uuid4())
+
+        # Save the raw file to disk — avoid loading all rows in the web request
+        xlsx_path = os.path.join(temp_dir, f'{session_id}.xlsx')
+        with open(xlsx_path, 'wb') as fh:
+            for chunk in upload_file.chunks():
+                fh.write(chunk)
+
+        # Read only the header row to get column names
+        try:
+            wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+        except Exception as exc:
+            os.remove(xlsx_path)
+            messages.error(request, f'Could not open file: {exc}')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        ws = wb.active
+        header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        wb.close()
+
+        if not header or str(header[0]).strip().lower() != 'date':
+            os.remove(xlsx_path)
+            messages.error(request, 'Expected first column to be "Date". Check the file format.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        columns = [str(c).strip() for c in header[1:] if c is not None and str(c).strip()]
+        if not columns:
+            os.remove(xlsx_path)
+            messages.error(request, 'No index columns found in header row.')
+            return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+        # Store session metadata — full parsing happens at confirm time
+        meta_file = os.path.join(temp_dir, f'{session_id}.json')
+        with open(meta_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'type': 'batch',
+                'filename': upload_file.name,
+                'vessel_size': vessel_size,
+                'xlsx_path': xlsx_path,
+                'columns': columns,
+            }, f)
+
+        return redirect('voyage:review_excel_mappings', session_id=session_id)
+
+    return render(request, 'voyage/upload_batch_indices.html', {'vessel_choices': VESSEL_CHOICES})
+
+
+def review_excel_mappings(request, session_id):
+    """Show / confirm per-code mapping between Excel RateCodes and AvailableIndex entries.
+
+    Handles two session types:
+      'batch' — large historical files saved as .xlsx on disk; parsed at confirm time
+               using streaming + batched bulk_create to avoid timeouts.
+      'eod'   — small daily EOD files whose rows were pre-parsed into the session JSON.
+    """
+    import openpyxl
+    from .models import IndexCodeMapping
+
+    temp_dir = os.path.join(tempfile.gettempdir(), 'freightdash_excel_upload')
+    temp_file = os.path.join(temp_dir, f'{session_id}.json')
+
+    if not os.path.exists(temp_file):
+        messages.error(request, 'Upload session not found or expired. Please upload again.')
+        return redirect('voyage:upload_excel_indices')
+
+    with open(temp_file, 'r', encoding='utf-8') as f:
+        session_data = json.load(f)
+
+    filename = session_data.get('filename', '')
+    session_type = session_data.get('type', 'eod')       # 'batch' or 'eod'
+    session_vessel_size = session_data.get('vessel_size') # may be None for EOD
+
+    # Build unique-codes dict for the review table.
+    # Batch sessions store only column names (no row data yet).
+    # EOD sessions store pre-parsed rows.
+    seen = {}  # code -> representative dict {code, description, date, value}
+    if session_type == 'batch':
+        for col in session_data.get('columns', []):
+            if col not in seen:
+                seen[col] = {'code': col, 'description': col, 'date': '—', 'value': ''}
+    else:
+        for r in session_data.get('rows', []):
+            code = r['code']
+            if code not in seen:
+                seen[code] = r
+
+    # Common DB lookups
+    all_indices = list(AvailableIndex.objects.filter(is_active=True).order_by('vessel_size', 'name'))
+    saved_mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
+    index_by_name = {idx.name.lower(): idx for idx in all_indices}
+
+    # ------------------------------------------------------------------ POST
+    if request.method == 'POST':
+        # Step 1: persist the user's mapping choices
+        with transaction.atomic():
+            for code in seen:
+                action = request.POST.get(f'action_{code}', 'auto')
+                target_id = request.POST.get(f'target_{code}', '')
+
+                if action == 'skip':
+                    IndexCodeMapping.objects.update_or_create(
+                        rate_code=code,
+                        defaults={'skip': True, 'target_index': None},
+                    )
+                    continue
+
+                target_index = None
+                if target_id:
+                    try:
+                        target_index = AvailableIndex.objects.get(pk=int(target_id))
+                    except (AvailableIndex.DoesNotExist, ValueError):
+                        pass
+
+                if target_index is None:
+                    vs = session_vessel_size or _rate_code_vessel_size(code)
+                    target_index, _ = AvailableIndex.objects.get_or_create(
+                        name=code,
+                        defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
+                    )
+
+                IndexCodeMapping.objects.update_or_create(
+                    rate_code=code,
+                    defaults={'skip': False, 'target_index': target_index},
+                )
+
+        # Step 2: import values — different strategy per session type
+        mappings = {m.rate_code: m for m in IndexCodeMapping.objects.select_related('target_index').all()}
+        dates_seen = set()
+        new_values = 0
+
+        if session_type == 'batch':
+            # Stream the saved .xlsx row-by-row; bulk_create in batches of 500
+            xlsx_path = session_data.get('xlsx_path', '')
+            if not os.path.exists(xlsx_path):
+                messages.error(request, 'Uploaded file no longer found. Please upload again.')
+                return redirect('voyage:upload_batch_indices')
+
+            # Resolve index objects for each column up-front
+            col_index_map = {}   # col_name -> AvailableIndex (or None if skipped)
+            for col in session_data.get('columns', []):
+                m = mappings.get(col)
+                if m and m.skip:
+                    col_index_map[col] = None
+                    continue
+                idx_obj = m.target_index if (m and m.target_index) else None
+                if idx_obj is None:
+                    vs = session_vessel_size or _rate_code_vessel_size(col)
+                    idx_obj, _ = AvailableIndex.objects.get_or_create(
+                        name=col,
+                        defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
+                    )
+                col_index_map[col] = idx_obj
+
+            wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+            ws = wb.active
+            header = None
+            index_cols = []   # [(col_offset_in_header, col_name), ...]
+            batch = []
+            BATCH_SIZE = 500
+
+            for row in ws.iter_rows(min_row=1, values_only=True):
+                if header is None:
+                    header = row
+                    for i, cell in enumerate(header[1:], start=1):
+                        name = str(cell).strip() if cell else ''
+                        if name and name in col_index_map:
+                            index_cols.append((i, name))
+                    continue
+
+                date_val = row[0] if row else None
+                if date_val is None:
+                    continue
+                if isinstance(date_val, datetime):
+                    row_date = date_val.date()
+                else:
+                    row_date = _parse_date(str(date_val))
+                if not row_date:
+                    continue
+
+                for col_i, col_name in index_cols:
+                    idx_obj = col_index_map.get(col_name)
+                    if idx_obj is None:
+                        continue
+                    val = row[col_i] if col_i < len(row) else None
+                    if val is None:
+                        continue
+                    try:
+                        val = float(val)
+                    except (TypeError, ValueError):
+                        continue
+                    batch.append(DailyIndexValue(index=idx_obj, date=row_date, value=val))
+                    dates_seen.add(row_date)
+                    if len(batch) >= BATCH_SIZE:
+                        created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                        new_values += len(created)
+                        batch = []
+
+            wb.close()
+            if batch:
+                created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                new_values += len(created)
+
+            # Clean up both temp files
+            for path in (temp_file, xlsx_path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+        else:
+            # EOD: rows already parsed in session JSON — use bulk_create too
+            batch = []
+            BATCH_SIZE = 500
+            for r in session_data.get('rows', []):
+                code = r['code']
+                m = mappings.get(code)
+                if m and m.skip:
+                    continue
+                idx_obj = m.target_index if (m and m.target_index) else None
+                if idx_obj is None:
+                    vs = session_vessel_size or _rate_code_vessel_size(code)
+                    idx_obj, _ = AvailableIndex.objects.get_or_create(
+                        name=code,
+                        defaults={'vessel_size': vs, 'order': 999, 'is_active': True},
+                    )
+                row_date = _parse_date(r['date'])
+                if not row_date:
+                    continue
+                batch.append(DailyIndexValue(index=idx_obj, date=row_date, value=r['value']))
+                dates_seen.add(row_date)
+                if len(batch) >= BATCH_SIZE:
+                    created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                    new_values += len(created)
+                    batch = []
+            if batch:
+                created = DailyIndexValue.objects.bulk_create(batch, ignore_conflicts=True)
+                new_values += len(created)
+            try:
+                os.remove(temp_file)
+            except OSError:
+                pass
+
+        if new_values:
+            date_summary = f'{min(dates_seen)} → {max(dates_seen)}' if len(dates_seen) > 3 else ', '.join(str(d) for d in sorted(dates_seen))
+            messages.success(request, f'Imported {new_values} index values ({date_summary}).')
+        else:
+            messages.info(request, 'All values already existed — nothing new imported.')
+
+        redirect_url = 'voyage:upload_batch_indices' if session_type == 'batch' else 'voyage:upload_excel_indices'
+        return redirect(redirect_url)
+
+    # ------------------------------------------------------------------ GET
+    mapping_rows = []
+    for code, rep in seen.items():
+        saved = saved_mappings.get(code)
+        if saved and not saved.skip and saved.target_index:
+            suggested = saved.target_index
+            status = 'mapped'
+        elif saved and saved.skip:
+            suggested = None
+            status = 'skip'
+        elif code.lower() in index_by_name:
+            suggested = index_by_name[code.lower()]
+            status = 'exact'
+        else:
+            suggested = None
+            status = 'new'
+
+        mapping_rows.append({
+            'code': code,
+            'description': rep['description'],
+            'date': rep['date'],
+            'value': rep['value'],
+            'suggested': suggested,
+            'status': status,
+        })
+
+    mapping_rows.sort(key=lambda r: (0 if r['status'] in ('new', 'skip') else 1, r['code']))
+
+    context = {
+        'filename': filename,
+        'session_id': session_id,
+        'session_type': session_type,
+        'mapping_rows': mapping_rows,
+        'all_indices': all_indices,
+        'total': len(mapping_rows),
+        'unmatched': sum(1 for r in mapping_rows if r['status'] == 'new'),
     }
+    return render(request, 'voyage/review_excel_mappings.html', context)
+
+
+def vessel_compare(request):
+    from .models import ComparisonVessel, ComparisonVoyage, VesselCompareConfig, VesselVoyageIntake
+
+    def _f(val, default=0.0):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return float(default)
+
+    def _run_calc(cfg, voyages_qs, vessels_qs):
+        voyages = [
+            {'name': voy.name, 'ballast_dist': voy.ballast_dist, 'laden_dist': voy.laden_dist,
+             'load_rate': voy.load_rate, 'dis_rate': voy.dis_rate,
+             'load_factor': voy.load_factor, 'dis_factor': voy.dis_factor,
+             'turntimes_hours': voy.turntimes_hours,
+             'port_exp': voy.port_exp, 'various_exp': voy.various_exp}
+            for voy in voyages_qs
+        ]
+        # Build intake map: {vessel_id: {voyage_id: intake}}
+        intake_map = {}
+        for vi in VesselVoyageIntake.objects.filter(
+            vessel__in=vessels_qs, voyage__in=voyages_qs
+        ).select_related('vessel', 'voyage'):
+            intake_map.setdefault(vi.vessel_id, {})[vi.voyage_id] = vi.intake
+
+        vessels = []
+        for v in vessels_qs:
+            v_intakes = intake_map.get(v.id, {})
+            intakes = [v_intakes.get(voy.id, v.default_intake) for voy in voyages_qs]
+            vessels.append({
+                'name': v.name, 'intakes': intakes,
+                'laden_speed': v.laden_speed, 'ballast_speed': v.ballast_speed,
+                'laden_cons': v.laden_cons, 'ballast_cons': v.ballast_cons,
+                'port_cons': v.port_cons,
+            })
+
+        global_inputs = {'hire': cfg.hire, 'ifo_price': cfg.ifo_price,
+                         'mgo_price': cfg.mgo_price, 'weather_factor': cfg.weather_factor}
+        r = calculate_vessel_comparison(global_inputs, voyages, vessels)
+        r['vessel_summary'] = [
+            {'name': name, 'wa': wa,
+             'pct': wa * 100 if wa is not None else None,
+             'pct_delta': (wa - 1) * 100 if wa is not None else None}
+            for name, wa in zip(r['vessels'], r['weighted_avgs'])
+        ]
+        return r
+
+    cfg = VesselCompareConfig.get()
+
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+
+        if action == 'update_config':
+            cfg.hire = _f(request.POST.get('hire'), cfg.hire)
+            cfg.ifo_price = _f(request.POST.get('ifo_price'), cfg.ifo_price)
+            cfg.mgo_price = _f(request.POST.get('mgo_price'), cfg.mgo_price)
+            cfg.weather_factor = _f(request.POST.get('weather_factor'), cfg.weather_factor)
+            cfg.save()
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'add_voyage':
+            name = request.POST.get('new_voy_name', '').strip()
+            if name:
+                next_order = ComparisonVoyage.objects.count()
+                voy = ComparisonVoyage.objects.create(
+                    name=name, order=next_order,
+                    ballast_dist=_f(request.POST.get('new_voy_ballast_dist'), 5000),
+                    laden_dist=_f(request.POST.get('new_voy_laden_dist'), 5000),
+                    load_rate=_f(request.POST.get('new_voy_load_rate'), 10000),
+                    dis_rate=_f(request.POST.get('new_voy_dis_rate'), 10000),
+                    load_factor=_f(request.POST.get('new_voy_load_factor'), 1.0),
+                    dis_factor=_f(request.POST.get('new_voy_dis_factor'), 1.0),
+                    turntimes_hours=_f(request.POST.get('new_voy_turntimes'), 36),
+                    port_exp=_f(request.POST.get('new_voy_port_exp'), 100000),
+                    various_exp=_f(request.POST.get('new_voy_various_exp'), 10000),
+                )
+                # Create default intake records for all existing vessels
+                default_intake = _f(request.POST.get('new_voy_default_intake'), 79000)
+                for vessel in ComparisonVessel.objects.all():
+                    VesselVoyageIntake.objects.get_or_create(
+                        vessel=vessel, voyage=voy,
+                        defaults={'intake': default_intake},
+                    )
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'edit_voyage':
+            vid = request.POST.get('voyage_id')
+            try:
+                voy = ComparisonVoyage.objects.get(pk=int(vid))
+                voy.name = request.POST.get('edit_voy_name', voy.name).strip() or voy.name
+                voy.ballast_dist = _f(request.POST.get('edit_voy_ballast_dist'), voy.ballast_dist)
+                voy.laden_dist = _f(request.POST.get('edit_voy_laden_dist'), voy.laden_dist)
+                voy.load_rate = _f(request.POST.get('edit_voy_load_rate'), voy.load_rate)
+                voy.dis_rate = _f(request.POST.get('edit_voy_dis_rate'), voy.dis_rate)
+                voy.load_factor = _f(request.POST.get('edit_voy_load_factor'), voy.load_factor)
+                voy.dis_factor = _f(request.POST.get('edit_voy_dis_factor'), voy.dis_factor)
+                voy.turntimes_hours = _f(request.POST.get('edit_voy_turntimes'), voy.turntimes_hours)
+                voy.port_exp = _f(request.POST.get('edit_voy_port_exp'), voy.port_exp)
+                voy.various_exp = _f(request.POST.get('edit_voy_various_exp'), voy.various_exp)
+                voy.save()
+            except (ComparisonVoyage.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'delete_voyage':
+            vid = request.POST.get('voyage_id')
+            try:
+                ComparisonVoyage.objects.get(pk=int(vid)).delete()
+            except (ComparisonVoyage.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'add_vessel':
+            name = request.POST.get('new_name', '').strip()
+            if name:
+                default_intake = _f(request.POST.get('new_default_intake'), 79000)
+                next_order = ComparisonVessel.objects.count()
+                vessel = ComparisonVessel.objects.create(
+                    name=name, order=next_order,
+                    default_intake=default_intake,
+                    laden_speed=_f(request.POST.get('new_laden_speed'), 12),
+                    ballast_speed=_f(request.POST.get('new_ballast_speed'), 12.5),
+                    laden_cons=_f(request.POST.get('new_laden_cons'), 22),
+                    ballast_cons=_f(request.POST.get('new_ballast_cons'), 23),
+                    port_cons=_f(request.POST.get('new_port_cons'), 4.5),
+                )
+                # Create intake records for each voyage
+                for voy in ComparisonVoyage.objects.all():
+                    intake_val = _f(request.POST.get(f'new_intake_{voy.id}'), default_intake)
+                    VesselVoyageIntake.objects.get_or_create(
+                        vessel=vessel, voyage=voy,
+                        defaults={'intake': intake_val},
+                    )
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'edit_vessel':
+            vid = request.POST.get('vessel_id')
+            try:
+                v = ComparisonVessel.objects.get(pk=int(vid))
+                v.name = request.POST.get('edit_name', v.name).strip() or v.name
+                v.default_intake = _f(request.POST.get('edit_default_intake'), v.default_intake)
+                v.laden_speed = _f(request.POST.get('edit_laden_speed'), v.laden_speed)
+                v.ballast_speed = _f(request.POST.get('edit_ballast_speed'), v.ballast_speed)
+                v.laden_cons = _f(request.POST.get('edit_laden_cons'), v.laden_cons)
+                v.ballast_cons = _f(request.POST.get('edit_ballast_cons'), v.ballast_cons)
+                v.port_cons = _f(request.POST.get('edit_port_cons'), v.port_cons)
+                v.save()
+                # Update per-voyage intakes
+                for voy in ComparisonVoyage.objects.all():
+                    intake_val = _f(request.POST.get(f'edit_intake_{voy.id}'), v.default_intake)
+                    VesselVoyageIntake.objects.update_or_create(
+                        vessel=v, voyage=voy,
+                        defaults={'intake': intake_val},
+                    )
+            except (ComparisonVessel.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+        elif action == 'delete_vessel':
+            vid = request.POST.get('vessel_id')
+            try:
+                v = ComparisonVessel.objects.get(pk=int(vid))
+                if not v.is_standard:
+                    v.delete()
+            except (ComparisonVessel.DoesNotExist, ValueError):
+                pass
+            return redirect('voyage:vessel_compare')
+
+    voyages_qs = ComparisonVoyage.objects.all()
+    vessels_qs = ComparisonVessel.objects.all()
+
+    # Build intake lookup for template: {vessel_id: {voyage_id: intake}}
+    intake_map = {}
+    for vi in VesselVoyageIntake.objects.filter(
+        vessel__in=vessels_qs, voyage__in=voyages_qs
+    ).select_related('vessel', 'voyage'):
+        intake_map.setdefault(vi.vessel_id, {})[vi.voyage_id] = vi.intake
+
+    # Enrich vessels with per-voyage intake list for template
+    vessels_with_intakes = []
+    for v in vessels_qs:
+        v_intakes = intake_map.get(v.id, {})
+        vessels_with_intakes.append({
+            'obj': v,
+            'intakes': {voy.id: v_intakes.get(voy.id, v.default_intake) for voy in voyages_qs},
+        })
 
     results = None
     error = None
-
-    if request.method == 'POST':
+    if vessels_qs.exists() and voyages_qs.exists():
         try:
-            def _f(key, default=0.0):
-                v = request.POST.get(key, '')
-                try:
-                    return float(v)
-                except (ValueError, TypeError):
-                    return float(default)
-
-            global_inputs = {
-                'hire': _f('hire'),
-                'ifo_price': _f('ifo_price'),
-                'mgo_price': _f('mgo_price'),
-                'weather_factor': _f('weather_factor', 1.07),
-            }
-
-            voyages = []
-            for i in range(2):
-                voyages.append({
-                    'name': request.POST.get(f'v{i}_name', f'Voyage {i+1}'),
-                    'ballast_dist': _f(f'v{i}_ballast_dist'),
-                    'laden_dist': _f(f'v{i}_laden_dist'),
-                    'load_rate': _f(f'v{i}_load_rate'),
-                    'dis_rate': _f(f'v{i}_dis_rate'),
-                    'load_factor': _f(f'v{i}_load_factor', 1.0),
-                    'dis_factor': _f(f'v{i}_dis_factor', 1.0),
-                    'turntimes_hours': _f(f'v{i}_turntimes'),
-                    'port_exp': _f(f'v{i}_port_exp'),
-                    'various_exp': _f(f'v{i}_various_exp'),
-                })
-
-            vessel_names = request.POST.getlist('vessel_name')
-            vessel_count = len(vessel_names)
-
-            vessels = []
-            for j in range(vessel_count):
-                intakes = [_f(f'vessel_{j}_intake_v{i}') for i in range(2)]
-                vessels.append({
-                    'name': vessel_names[j] or f'Vessel {j+1}',
-                    'intakes': intakes,
-                    'laden_speed': _f(f'vessel_{j}_laden_speed'),
-                    'ballast_speed': _f(f'vessel_{j}_ballast_speed'),
-                    'laden_cons': _f(f'vessel_{j}_laden_cons'),
-                    'ballast_cons': _f(f'vessel_{j}_ballast_cons'),
-                    'port_cons': _f(f'vessel_{j}_port_cons'),
-                })
-
-            if not vessels:
-                error = 'Please add at least one vessel (BKI standard).'
-            else:
-                results = calculate_vessel_comparison(global_inputs, voyages, vessels)
-                results['global_inputs'] = global_inputs
-                results['voyages_input'] = voyages
-                results['vessel_summary'] = [
-                    {
-                        'name': name,
-                        'wa': wa,
-                        'pct_delta': (wa - 1) * 100 if wa is not None else None,
-                    }
-                    for name, wa in zip(results['vessels'], results['weighted_avgs'])
-                ]
-
+            results = _run_calc(cfg, voyages_qs, vessels_qs)
         except Exception as exc:
-            logger.exception("Error in vessel_compare")
+            logger.exception("Error in vessel_compare calculation")
             error = str(exc)
 
-        form_voyages = []
-        for i in range(2):
-            form_voyages.append({
-                'name': request.POST.get(f'v{i}_name', DEFAULT_VOYAGES[i]['name']),
-                'ballast_dist': request.POST.get(f'v{i}_ballast_dist', DEFAULT_VOYAGES[i]['ballast_dist']),
-                'laden_dist': request.POST.get(f'v{i}_laden_dist', DEFAULT_VOYAGES[i]['laden_dist']),
-                'load_rate': request.POST.get(f'v{i}_load_rate', DEFAULT_VOYAGES[i]['load_rate']),
-                'dis_rate': request.POST.get(f'v{i}_dis_rate', DEFAULT_VOYAGES[i]['dis_rate']),
-                'load_factor': request.POST.get(f'v{i}_load_factor', DEFAULT_VOYAGES[i]['load_factor']),
-                'dis_factor': request.POST.get(f'v{i}_dis_factor', DEFAULT_VOYAGES[i]['dis_factor']),
-                'turntimes_hours': request.POST.get(f'v{i}_turntimes', DEFAULT_VOYAGES[i]['turntimes_hours']),
-                'port_exp': request.POST.get(f'v{i}_port_exp', DEFAULT_VOYAGES[i]['port_exp']),
-                'various_exp': request.POST.get(f'v{i}_various_exp', DEFAULT_VOYAGES[i]['various_exp']),
-                'bki_intake': request.POST.get(f'v{i}_bki_intake', DEFAULT_VOYAGES[i]['bki_intake']),
-            })
-        form_global = {
-            'hire': request.POST.get('hire', DEFAULT_GLOBAL['hire']),
-            'ifo_price': request.POST.get('ifo_price', DEFAULT_GLOBAL['ifo_price']),
-            'mgo_price': request.POST.get('mgo_price', DEFAULT_GLOBAL['mgo_price']),
-            'weather_factor': request.POST.get('weather_factor', DEFAULT_GLOBAL['weather_factor']),
-        }
-
-        vessel_names = request.POST.getlist('vessel_name')
-        form_vessels = []
-        for j in range(len(vessel_names)):
-            form_vessels.append({
-                'name': request.POST.get(f'vessel_{j}_name', ''),
-                'intake_v0': request.POST.get(f'vessel_{j}_intake_v0', ''),
-                'intake_v1': request.POST.get(f'vessel_{j}_intake_v1', ''),
-                'laden_speed': request.POST.get(f'vessel_{j}_laden_speed', ''),
-                'ballast_speed': request.POST.get(f'vessel_{j}_ballast_speed', ''),
-                'laden_cons': request.POST.get(f'vessel_{j}_laden_cons', ''),
-                'ballast_cons': request.POST.get(f'vessel_{j}_ballast_cons', ''),
-                'port_cons': request.POST.get(f'vessel_{j}_port_cons', ''),
-            })
-    else:
-        form_global = DEFAULT_GLOBAL
-        form_voyages = DEFAULT_VOYAGES
-        form_vessels = [
-            {
-                'name': 'BKI',
-                'intake_v0': 79000, 'intake_v1': 69500,
-                'laden_speed': 11.5, 'ballast_speed': 12.5,
-                'laden_cons': 22, 'ballast_cons': 23, 'port_cons': 4.5,
-            }
-        ]
-
     context = {
-        'form_global': form_global,
-        'form_voyages': form_voyages,
-        'form_vessels': form_vessels,
+        'cfg': cfg,
+        'voyages': voyages_qs,
+        'vessels': vessels_qs,
+        'vessels_with_intakes': vessels_with_intakes,
         'results': results,
         'error': error,
     }
