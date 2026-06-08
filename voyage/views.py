@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from io import BytesIO
 
 import pdfplumber
@@ -20,11 +20,15 @@ import logging
 from .models import RouteParameters
 from .models import (
     AvailableIndex,
+    ComparisonVessel,
     CustomIndexPreset,
     DailyIndexValue,
+    FFACurve,
+    FFACurvePeriod,
     FreightVoyage,
     VesselFuelConsumption,
 )
+from .ffa_utils import parse_ffa_text
 from .forms import TCECalculatorForm
 from .calculators import (
     calculate_fuel_and_days,
@@ -1904,21 +1908,16 @@ def vessel_compare(request):
 
 
 def ffa_valuation(request):
-    import json as _json
-    from datetime import date as _date
-    from .models import FFACurve, FFACurvePeriod, ComparisonVessel
-    from .ffa_utils import parse_ffa_text
-
     if request.method == 'POST':
         ct = request.content_type or ''
         if 'application/json' in ct:
-            body = _json.loads(request.body)
+            body = json.loads(request.body)
         else:
             body = request.POST
         action = body.get('action')
 
         if action == 'parse':
-            result = parse_ffa_text(body.get('raw_text', ''), _date.today())
+            result = parse_ffa_text(body.get('raw_text', ''), date.today())
             return JsonResponse({
                 'vessel_class': result['vessel_class'],
                 'periods': [
@@ -1937,7 +1936,7 @@ def ffa_valuation(request):
             vessel_class = body.get('vessel_class', '')
             periods_data = body.get('periods', [])
             if isinstance(periods_data, str):
-                periods_data = _json.loads(periods_data)
+                periods_data = json.loads(periods_data)
             curve = FFACurve.objects.create(vessel_class=vessel_class, raw_text=raw_text)
             FFACurvePeriod.objects.bulk_create([
                 FFACurvePeriod(
@@ -1954,7 +1953,7 @@ def ffa_valuation(request):
     return render(request, 'voyage/ffa_valuation.html', {
         'curve': curve,
         'vessels': vessels,
-        'today': _date.today(),
+        'today': date.today(),
     })
 
 

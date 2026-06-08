@@ -1,7 +1,12 @@
+import json as _json
 from datetime import date
 from decimal import Decimal
+
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+
+from .models import FFACurve, FFACurvePeriod
 
 
 SAMPLE_CURVE = """Pmax
@@ -125,15 +130,8 @@ class FFABlendingTestCase(TestCase):
         self.assertAlmostEqual(sum(x['weight'] for x in r['breakdown']), 1.0, places=4)
 
 
-import json as _json
-from django.test import Client
-from django.contrib.auth import get_user_model
-from .models import FFACurve, FFACurvePeriod
-
-
 class FFAViewsTestCase(TestCase):
     def setUp(self):
-        self.client = Client()
         User = get_user_model()
         user = User.objects.create_user(username='testuser', password='testpass')
         self.client.force_login(user)
