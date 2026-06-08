@@ -12,9 +12,9 @@ DEFAULT_MENU_ITEMS = [
         'children': [],
     },
     {
-        'title': 'Upload PDF Indices',
-        'url': '/upload-pdf-indices/',
-        'icon': 'fas fa-file-upload',
+        'title': 'FFA Valuation',
+        'url': '/ffa-valuation/',
+        'icon': 'fas fa-chart-line',
         'children': [],
     },
     {
