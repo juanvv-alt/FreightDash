@@ -73,3 +73,50 @@ class FFAParserTestCase(TestCase):
 
     def test_total_period_count(self):
         self.assertEqual(len(self._parse()['periods']), 15)
+
+
+class FFABlendingTestCase(TestCase):
+    def _periods(self):
+        from .ffa_utils import parse_ffa_text
+        return parse_ffa_text(SAMPLE_CURVE, REF)['periods']
+
+    def _blend(self, start, months):
+        from .ffa_utils import resolve_employment_periods
+        return resolve_employment_periods(self._periods(), start, months)
+
+    def test_9m_from_jul1_uses_monthly_over_quarterly(self):
+        # Jul/Aug/Sep each have monthly rates which take priority over Q3.
+        # Oct-Dec uses Q4, Jan-Mar uses Q1.
+        r = self._blend(date(2026, 7, 1), 9)
+        self.assertIsNone(r['coverage_warning'])
+        labels = [x['label'] for x in r['breakdown']]
+        self.assertIn('Jul', labels)   # monthly beats Q3 for Jul
+        self.assertIn('Q4', labels)
+        self.assertIn('Q1', labels)
+        # 31+31+30=92 days monthly, 92 days Q4, 90 days Q1 = 274 total
+        expected = round((21400*31 + 21000*31 + 20200*30 + 19550*92 + 15150*90) / 274, 2)
+        self.assertAlmostEqual(float(r['blended_offer']), float(expected), places=1)
+
+    def test_monthly_priority_over_quarterly(self):
+        # Jul has a monthly rate (21400); Q3 also covers Jul (20867).
+        # Monthly wins.
+        r = self._blend(date(2026, 7, 1), 1)
+        self.assertAlmostEqual(float(r['blended_offer']), 21400.0, places=0)
+
+    def test_partial_first_month_days(self):
+        r = self._blend(date(2026, 7, 15), 1)
+        jul_row = next(x for x in r['breakdown'] if 'Jul' in x['label'])
+        self.assertEqual(jul_row['days'], 17)  # Jul 15–31
+
+    def test_coverage_warning_beyond_curve(self):
+        r = self._blend(date(2029, 6, 1), 12)
+        self.assertIsNotNone(r['coverage_warning'])
+        self.assertIsNone(r['blended_offer'])
+
+    def test_end_date_correct(self):
+        r = self._blend(date(2026, 7, 1), 3)
+        self.assertEqual(r['end_date'], date(2026, 10, 1))
+
+    def test_weights_sum_to_one(self):
+        r = self._blend(date(2026, 7, 15), 9)
+        self.assertAlmostEqual(sum(x['weight'] for x in r['breakdown']), 1.0, places=4)
