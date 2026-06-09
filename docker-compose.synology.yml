@@ -1,0 +1,83 @@
+version: '3.9'
+
+# Synology NAS deployment — pulls pre-built image from GHCR.
+# Watchtower auto-updates the web container when a new image is pushed.
+#
+# Setup:
+#   1. Copy this file and .env.synology.example to your NAS (e.g. /volume1/docker/freightdash/)
+#   2. Rename .env.synology.example to .env and fill in your values
+#   3. Run: docker-compose -f docker-compose.synology.yml up -d
+#
+# After that, every push to main on GitHub triggers a new build and
+# Watchtower will pull + restart the web container within ~5 minutes.
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: freightdash_db
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${COMPOSE_DB_NAME:-freightdash}
+      POSTGRES_USER: ${COMPOSE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${COMPOSE_DB_PASSWORD}
+      TZ: Asia/Singapore
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${COMPOSE_DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/juanvv-alt/freightdash:latest
+    container_name: freightdash_web
+    env_file: .env
+    environment:
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_NAME: ${COMPOSE_DB_NAME:-freightdash}
+      DATABASE_USER: ${COMPOSE_DB_USER:-postgres}
+      DATABASE_PASSWORD: ${COMPOSE_DB_PASSWORD}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8000}
+      TZ: Asia/Singapore
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - static_volume:/app/staticfiles
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: freightdash_watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Check for new images every 5 minutes
+      WATCHTOWER_POLL_INTERVAL: 300
+      TZ: Asia/Singapore
+    restart: unless-stopped
+    networks:
+      - freightdash_network
+
+volumes:
+  postgres_data:
+    driver: local
+  static_volume:
+    driver: local
+
+networks:
+  freightdash_network:
+    driver: bridge
