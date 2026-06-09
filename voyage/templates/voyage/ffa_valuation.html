@@ -60,17 +60,27 @@ table.ffa-periods-tbl td input:focus { outline: none; border-color: #1e3c72; }
 .kpi-card.kpi-vessel { border-top: 3px solid #28a745; }
 
 /* Gantt timeline */
-#ffa-timeline { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 16px; margin-bottom: 14px; overflow-x: auto; display: none; }
+#ffa-timeline { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 16px 16px 10px; margin-bottom: 14px; overflow-x: auto; display: none; }
 #ffa-timeline.visible { display: block; }
-.timeline-inner { position: relative; height: 50px; min-width: 400px; background: #f8f9fa; border-radius: 4px; }
-.tl-block { position: absolute; top: 6px; height: 22px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: white; overflow: hidden; white-space: nowrap; padding: 0 4px; cursor: default; }
+#ffa-timeline h6 { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 10px; }
+.tl-chart { position: relative; min-width: 500px; }
+/* Three period rows: monthly/balmo | quarterly | calendar year */
+.tl-row-short { position: relative; height: 24px; margin-bottom: 3px; }
+.tl-row-mid   { position: relative; height: 24px; margin-bottom: 3px; }
+.tl-row-long  { position: relative; height: 24px; margin-bottom: 3px; }
+/* Employment bar row */
+.tl-row-emp   { position: relative; height: 12px; margin-bottom: 2px; }
+/* Axis row */
+.tl-axis      { position: relative; height: 18px; border-top: 1px solid #e0e0e0; }
+.tl-block { position: absolute; top: 0; height: 100%; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; overflow: hidden; white-space: nowrap; padding: 0 4px; cursor: default; box-sizing: border-box; }
 .tl-block.monthly { background: #1e3c72; }
 .tl-block.quarterly { background: #2a5298; }
 .tl-block.balmo { background: #17a2b8; }
 .tl-block.calendar_year { background: #6c757d; }
 .tl-block.combined { background: #adb5bd; }
-.tl-employment { position: absolute; top: 32px; height: 10px; border-radius: 2px; background: rgba(40,167,69,0.5); border: 1px solid #28a745; }
-.tl-labels { display: flex; justify-content: space-between; font-size: 10px; color: #999; margin-top: 4px; }
+.tl-employment { position: absolute; top: 0; height: 100%; border-radius: 2px; background: rgba(40,167,69,0.45); border: 1px solid #28a745; box-sizing: border-box; }
+.tl-tick { position: absolute; top: 0; height: 6px; border-left: 1px solid #ccc; }
+.tl-tick-label { position: absolute; top: 6px; font-size: 9px; color: #aaa; transform: translateX(-50%); white-space: nowrap; }
 
 /* Section 4 – Breakdown table */
 table.breakdown-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -194,9 +204,14 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
 
 <!-- ===== Section 3: Timeline + KPI ===== -->
 <div id="ffa-timeline">
-    <div style="font-size:12px;font-weight:700;color:#666;margin-bottom:8px;text-transform:uppercase;">FFA Period Coverage</div>
-    <div class="timeline-inner" id="timeline-inner"></div>
-    <div class="tl-labels" id="tl-labels"></div>
+    <h6>FFA Period Coverage</h6>
+    <div class="tl-chart" id="tl-chart">
+        <div class="tl-row-short" id="tl-row-short"></div>
+        <div class="tl-row-mid"   id="tl-row-mid"></div>
+        <div class="tl-row-long"  id="tl-row-long"></div>
+        <div class="tl-row-emp"   id="tl-row-emp"></div>
+        <div class="tl-axis"      id="tl-axis"></div>
+    </div>
 </div>
 
 <div class="kpi-strip" id="kpi-strip">
@@ -306,8 +321,6 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
     const kpiFfaValue = document.getElementById('kpi-ffa-value');
     const kpiFfaSub = document.getElementById('kpi-ffa-sub');
     const timelineEl = document.getElementById('ffa-timeline');
-    const timelineInner = document.getElementById('timeline-inner');
-    const tlLabels = document.getElementById('tl-labels');
     const breakdownPlaceholder = document.getElementById('breakdown-placeholder');
     const breakdownTableWrap = document.getElementById('breakdown-table-wrap');
     const breakdownTbody = document.getElementById('breakdown-tbody');
@@ -527,8 +540,12 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
     // ---- Timeline ----
     function renderTimeline(periods, deliveryDate, endDate) {
         timelineEl.classList.add('visible');
-        timelineInner.innerHTML = '';
-        tlLabels.innerHTML = '';
+        const rowShort = document.getElementById('tl-row-short');
+        const rowMid   = document.getElementById('tl-row-mid');
+        const rowLong  = document.getElementById('tl-row-long');
+        const rowEmp   = document.getElementById('tl-row-emp');
+        const axis     = document.getElementById('tl-axis');
+        rowShort.innerHTML = rowMid.innerHTML = rowLong.innerHTML = rowEmp.innerHTML = axis.innerHTML = '';
 
         if (!periods || periods.length === 0) return;
 
@@ -537,41 +554,56 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
         const maxDate = allDates.reduce((a, b) => a > b ? a : b);
         const span = maxDate - minDate || 1;
 
+        function pct(d) { return ((d - minDate) / span * 100).toFixed(3); }
+
         for (const p of periods) {
             const s = new Date(p.start);
             const e = new Date(p.end);
-            const left = ((s - minDate) / span * 100).toFixed(2);
-            const width = Math.max(((e - s) / span * 100), 0.5).toFixed(2);
+            const left  = pct(s);
+            const width = Math.max(((e - s) / span * 100), 0.8).toFixed(3);
             const block = document.createElement('div');
             block.className = 'tl-block ' + (p.period_type || 'quarterly');
-            block.style.left = left + '%';
+            block.style.left  = left + '%';
             block.style.width = width + '%';
             block.title = `${p.label}: ${p.start_date} – ${p.end_date}\nOffer: ${p.offer}`;
-            block.textContent = p.label;
-            timelineInner.appendChild(block);
+            // Only show text if block is wide enough
+            block.textContent = parseFloat(width) >= 3 ? p.label : '';
+            const row = (p.period_type === 'balmo' || p.period_type === 'monthly') ? rowShort
+                      : (p.period_type === 'quarterly') ? rowMid
+                      : rowLong;
+            row.appendChild(block);
         }
 
         // Employment overlay
         if (deliveryDate && endDate) {
             const es = new Date(deliveryDate);
             const ee = new Date(endDate);
-            const eleft = ((es - minDate) / span * 100).toFixed(2);
-            const ewidth = Math.max(((ee - es) / span * 100), 0.5).toFixed(2);
             const emp = document.createElement('div');
             emp.className = 'tl-employment';
-            emp.style.left = eleft + '%';
-            emp.style.width = ewidth + '%';
+            emp.style.left  = pct(es) + '%';
+            emp.style.width = Math.max(((ee - es) / span * 100), 0.5).toFixed(3) + '%';
             emp.title = `Employment: ${deliveryDate} – ${endDate}`;
-            timelineInner.appendChild(emp);
+            rowEmp.appendChild(emp);
         }
 
-        // Labels
-        const startLabel = document.createElement('span');
-        startLabel.textContent = formatDate(minDate.toISOString().slice(0, 10));
-        const endLabel = document.createElement('span');
-        endLabel.textContent = formatDate(maxDate.toISOString().slice(0, 10));
-        tlLabels.appendChild(startLabel);
-        tlLabels.appendChild(endLabel);
+        // Axis ticks — one per quarter boundary within range
+        const tick0 = new Date(minDate);
+        tick0.setDate(1);
+        tick0.setMonth(Math.ceil(tick0.getMonth() / 3) * 3); // next quarter start
+        const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        for (let d = new Date(tick0); d <= maxDate; d.setMonth(d.getMonth() + 3)) {
+            const p = parseFloat(pct(d));
+            if (p < 0 || p > 100) continue;
+            const tick = document.createElement('div');
+            tick.className = 'tl-tick';
+            tick.style.left = p + '%';
+            axis.appendChild(tick);
+            const lbl = document.createElement('div');
+            lbl.className = 'tl-tick-label';
+            lbl.style.left = p + '%';
+            lbl.textContent = d.getMonth() === 0 ? String(d.getFullYear()) : MONTHS[d.getMonth()];
+            axis.appendChild(lbl);
+        }
     }
 
     // ---- Breakdown ----
