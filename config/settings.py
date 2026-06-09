@@ -102,6 +102,15 @@ database_url = config('DATABASE_URL', default='').strip()
 environment = config('ENVIRONMENT', default='development')
 database_engine = config('DATABASE_ENGINE', default='')
 
+if environment == 'production':
+    if SECRET_KEY.startswith('django-insecure-'):
+        raise RuntimeError(
+            'Production deployment is using the insecure default SECRET_KEY. '
+            'Set a strong SECRET_KEY environment variable.'
+        )
+    if DEBUG:
+        raise RuntimeError('DEBUG must be False in production.')
+
 # Use SQLite for local development if DATABASE_ENGINE is set to sqlite3
 if database_engine == 'django.db.backends.sqlite3':
     DATABASES = {
