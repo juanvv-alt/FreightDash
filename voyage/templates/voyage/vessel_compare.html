@@ -382,7 +382,7 @@ const INTAKES = {
 
 function toggleCard(hdr) {
     hdr.classList.toggle('open');
-    hdr.nextElementSibling.classList.toggle('open');
+    hdr.closest('.vc-card').querySelector('.vc-card-body').classList.toggle('open');
 }
 function togglePanel(id) {
     document.getElementById(id).classList.toggle('open');
