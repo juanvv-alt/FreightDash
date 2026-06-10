@@ -68,6 +68,9 @@ services:
       # Check for new images every 5 minutes
       WATCHTOWER_POLL_INTERVAL: 300
       TZ: Asia/Singapore
+      # GHCR credentials — required to pull from a private registry
+      REPO_USER: ${GHCR_USER:-juanvv-alt}
+      REPO_PASS: ${GHCR_PAT}
     restart: unless-stopped
     networks:
       - freightdash_network
