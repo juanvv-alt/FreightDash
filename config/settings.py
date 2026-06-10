@@ -268,7 +268,7 @@ JAZZMIN_SETTINGS = {
         "voyage": [
             {
                 "name": "Upload: Daily EOD (Excel)",
-                "url": "admin:indices-upload",
+                "url": "admin:upload-excel-indices",
                 "icon": "fas fa-file-excel",
             },
             {
