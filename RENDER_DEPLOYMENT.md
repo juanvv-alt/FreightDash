@@ -232,6 +232,44 @@ Dashboard → Service → "Clear all" → "Deploy"
 Dashboard → Deploys → Select previous → "Deploy"
 ```
 
+## 📡 AIS Supply Forecast Worker
+
+The `/supply-forecast/` feature needs a long-lived process consuming the
+[aisstream.io](https://aisstream.io) websocket. `render.yaml` defines a
+`freightdash-ais` **worker** service running
+`python manage.py ingest_ais --with-aggregation`.
+
+1. Get a free API key from aisstream.io.
+2. Set `AISSTREAM_API_KEY` on the `freightdash-ais` service in the Render
+   dashboard (it is declared `sync: false`, so it is not stored in git).
+3. Run `python manage.py seed_pacific_ports` once (e.g. from a one-off shell)
+   so the geofences exist.
+
+The worker maintains vessel state, emits port-call events, and builds the daily
+`DailySupplySnapshot` + `SupplySignal` shortly after local midnight. Signals read
+*insufficient* until ~2 weeks of history accumulate, then switch to a z-score
+heuristic and eventually a regression — coverage is shown in the page banner.
+
+> ⚠️ One websocket connection per free key. Do not run the docker-compose
+> `ais_ingester` and the Render worker on the same key simultaneously.
+
+**Degraded path (no paid worker):** replace the worker with two Render cron jobs:
+
+```yaml
+  - type: cron
+    name: freightdash-ais-poll
+    schedule: "*/20 * * * *"
+    dockerCommand: python manage.py ingest_ais --duration-seconds 1080
+  - type: cron
+    name: freightdash-supply-agg
+    schedule: "15 0 * * *"
+    dockerCommand: python manage.py aggregate_supply
+```
+
+Each poll ingests for 18 of every 20 minutes. Geofence transitions are still
+detected on the next position inside/outside a fence, so port calls are delayed
+rather than lost — though in/out flicker during the 2-minute gaps is missed.
+
 ## 🔗 Helpful Resources
 
 - [Render Docker Docs](https://render.com/docs/docker)

@@ -38,6 +38,12 @@ python manage.py create_sample_routes    # seed RouteParameters
 python manage.py create_sample_voyages   # seed FreightVoyage / vessel data
 python manage.py upload_indices          # bulk-upload Baltic index Excel
 python manage.py create_admin            # create default superuser
+# Supply forecast (supply app):
+python manage.py seed_pacific_ports      # seed ~33 Pacific load/discharge ports
+python manage.py ingest_ais              # live AIS websocket worker (needs AISSTREAM_API_KEY)
+python manage.py ingest_ais --replay f.jsonl   # offline replay (no key needed)
+python manage.py make_ais_fixture --out f.jsonl  # synthetic AIS data for demos/tests
+python manage.py aggregate_supply        # build daily snapshot + signal
 ```
 
 **Database config priority** (settings.py):
@@ -99,6 +105,22 @@ Custom admin views are injected by monkey-patching `admin.site.get_urls`:
 - `templates/base.html` — global base.
 - `voyage/templates/voyage/*.html` — all voyage app templates.
 - `templates/admin/*.html` — custom admin templates for index upload/config.
+
+### `supply` app
+Pacific dry-bulk **vessel supply forecast** from AIS movements correlated with market data. Reads `voyage` models (`DailyIndexValue`, `FFACurve`) read-only; nothing in `voyage` depends on `supply`.
+
+**Models (`supply/models.py`):** `Port` (geofenced load/discharge ports, lat/lon + `radius_nm`), `TrackedVessel` (MMSI/IMO, class derived from AIS dimensions/draught), `VesselState` (one row per vessel, updated in place — current position, laden/ballast, current port), `PortCallEvent` (arrival/departure events), `DailySupplySnapshot` (daily aggregate per class + an `all` row), `SupplySignal` (daily directional signal per class, kept for backtesting).
+
+**Pipeline:**
+1. `ingest_ais` — long-lived aisstream.io websocket worker (`supply/ingest.py` `AISIngestor`). No per-message storage: an in-memory cache throttles DB writes to meaningful changes (moved >5nm, draught delta, geofence crossing, or 30-min interval). `--replay <jsonl>` runs the identical logic offline (used by tests/demos). Reconnects with exponential backoff. Env var `AISSTREAM_API_KEY`.
+2. `aggregate_supply` — `supply/aggregation.py` `build_snapshot` rolls `VesselState` into `DailySupplySnapshot`; `--with-aggregation` on the ingester runs this just after local midnight (no Celery).
+3. `supply/analytics.py` `generate_signal` — transparent stats (pandas/numpy only): rolling 4w/12w z-scores, lagged correlations, a small `numpy.linalg.lstsq` regression once ~8 weeks exist, FFA curve slope. Degrades: `insufficient` (<14d) → `zscore` heuristic → blended `regression`. `CLASS_INDEX_MAP` ties each class to its TC index (`BCI 5TC`/`BPI 82TC`/`BSI 58TC`/`BHSI 38TC`).
+
+**Classification (`supply/classification.py`):** AIS ship type 70–79; class by length band (cape ≥270m, pmax 215–270, supra 185–215, handy 150–185), draught as fallback. Laden/ballast = reported draught ≥ 80% of max observed.
+
+**Page:** `/supply-forecast/` (`supply/views.py`) — per-class signal cards (direction/score/confidence/drivers), dual-axis Chart.js (supply metrics vs TC index, `/supply-forecast/chart-data/<class>/`), recent port-call table, and a data-coverage banner (the model strengthens as AIS history accrues from scratch).
+
+**Caveats:** aisstream.io is terrestrial AIS — mid-ocean coverage is sparse, so in-port counts and port calls are more reliable than at-sea counts. The ingester needs to run as a worker (docker-compose `ais_ingester` / Render `freightdash-ais` worker); degraded no-worker fallback is two Render cron jobs (`ingest_ais --duration-seconds` + `aggregate_supply`).
 
 ## Deployment
 

@@ -18,6 +18,12 @@ DEFAULT_MENU_ITEMS = [
         'children': [],
     },
     {
+        'title': 'Supply Forecast',
+        'url': '/supply-forecast/',
+        'icon': 'fas fa-satellite-dish',
+        'children': [],
+    },
+    {
         'title': 'Admin Panel',
         'url': '/admin/',
         'icon': 'fas fa-cog',

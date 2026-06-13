@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'nested_admin',
     'core',
     'voyage',
+    'supply',
 ]
 
 MIDDLEWARE = [
@@ -249,6 +250,12 @@ JAZZMIN_SETTINGS = {
         "voyage.vesselprofile":      "fas fa-ship",
         "voyage.vesselfuelprofile":  "fas fa-gas-pump",
         "voyage.freightvoyage":      "fas fa-anchor",
+        "supply.port":               "fas fa-anchor",
+        "supply.trackedvessel":      "fas fa-ship",
+        "supply.vesselstate":        "fas fa-location-dot",
+        "supply.portcallevent":      "fas fa-exchange-alt",
+        "supply.dailysupplysnapshot": "fas fa-layer-group",
+        "supply.supplysignal":       "fas fa-satellite-dish",
     },
 
     "order_with_respect_to": [
@@ -322,3 +329,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Authentication
 LOGIN_URL = '/admin/login/'
 LOGOUT_REDIRECT_URL = '/admin/login/'
+
+# AIS supply forecast: free aisstream.io websocket API key (one connection/key).
+AISSTREAM_API_KEY = config('AISSTREAM_API_KEY', default='')
