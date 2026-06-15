@@ -62,6 +62,37 @@ services:
     stdin_open: true
     tty: true
 
+  # AIS Ingestion Worker (supply forecast)
+  # Long-lived websocket consumer that maintains vessel state and emits
+  # port-call events; --with-aggregation also builds the daily snapshot/signal.
+  # Requires AISSTREAM_API_KEY (free key from https://aisstream.io). Do not run
+  # this alongside a separate worker on the SAME key -- one connection per key.
+  ais_ingester:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: freightdash_ais
+    command: python manage.py ingest_ais --with-aggregation
+    environment:
+      DATABASE_ENGINE: django.db.backends.postgresql
+      DATABASE_NAME: ${COMPOSE_DB_NAME:-freightdash}
+      DATABASE_USER: ${COMPOSE_DB_USER:-postgres}
+      DATABASE_PASSWORD: ${COMPOSE_DB_PASSWORD:-changeme}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      TZ: Asia/Singapore
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+
   # Redis Cache Service (Optional but recommended for production)
   redis:
     image: redis:7-alpine

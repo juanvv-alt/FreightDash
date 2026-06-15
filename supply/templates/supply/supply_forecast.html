@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Supply Forecast - FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+    .signal-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); height: 100%; }
+    .signal-card .card-header { border-radius: 12px 12px 0 0; font-weight: 600; }
+    .badge-bullish { background-color: var(--success-color); }
+    .badge-bearish { background-color: var(--danger-color); }
+    .badge-neutral { background-color: var(--secondary-color); }
+    .driver-list { font-size: 0.85rem; padding-left: 1.1rem; margin-bottom: 0; }
+    .driver-list li { margin-bottom: 0.35rem; }
+    .metric-row { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 2px 0; }
+    .wow-up { color: var(--danger-color); }
+    .wow-down { color: var(--success-color); }
+    .confidence-bar { height: 6px; border-radius: 3px; background: #e9ecef; overflow: hidden; }
+    .confidence-fill { height: 100%; background: var(--primary-color); }
+    .coverage-banner { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; }
+    .class-tab { cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0"><i class="fas fa-satellite-dish me-2"></i>Pacific Supply Forecast</h2>
+</div>
+
+<div class="coverage-banner mb-4">
+    <i class="fas fa-info-circle me-1"></i>
+    <strong>Data coverage:</strong>
+    {{ coverage.snapshot_days }} day(s) of supply history
+    {% if coverage.first_date %}(since {{ coverage.first_date }}){% endif %};
+    {{ coverage.vessels_48h }} vessel(s) seen in the last 48h
+    (of {{ coverage.total_vessels }} tracked).
+    {% if coverage.last_heartbeat %}Last AIS update: {{ coverage.last_heartbeat }}.{% endif %}
+    The model improves as more history accumulates &mdash; signals read
+    <em>insufficient</em> below 14 days, switch to a z-score heuristic, then a
+    regression once ~8 weeks are available. At-sea counts undercount mid-ocean
+    (terrestrial AIS); in-port counts and port calls are the most reliable inputs.
+</div>
+
+<div class="row g-3 mb-4">
+    {% for card in cards %}
+    <div class="col-md-6 col-xl-3">
+        <div class="card signal-card">
+            <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                <span>{{ card.label }}</span>
+                <span class="badge badge-{{ card.signal.direction }} text-uppercase">{{ card.signal.direction }}</span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-1">
+                    <small class="text-muted">Score</small>
+                    <strong>{{ card.signal.score|floatformat:2 }}</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-1">
+                    <small class="text-muted">Confidence</small>
+                    <strong>{{ card.confidence_pct }}%</strong>
+                </div>
+                <div class="confidence-bar mb-2">
+                    <div class="confidence-fill" style="width: {{ card.confidence_pct }}%"></div>
+                </div>
+                <div class="text-muted mb-2" style="font-size:0.75rem;">
+                    Method: {{ card.signal.method }} &middot; {{ card.signal.data_days }}d data
+                    {% if card.index_name %}&middot; vs {{ card.index_name }}{% endif %}
+                </div>
+
+                {% if card.deltas %}
+                <div class="mb-2">
+                    {% for d in card.deltas %}
+                    <div class="metric-row">
+                        <span class="text-muted">{{ d.label }}</span>
+                        <span>
+                            {{ d.value }}
+                            {% if d.wow is not None %}
+                                {% if d.wow > 0 %}<span class="wow-up">(+{{ d.wow }})</span>
+                                {% elif d.wow < 0 %}<span class="wow-down">({{ d.wow }})</span>
+                                {% else %}<span class="text-muted">(0)</span>{% endif %}
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <hr class="my-2">
+                <ul class="driver-list">
+                    {% for driver in card.signal.drivers %}
+                    <li>{{ driver }}</li>
+                    {% empty %}
+                    <li class="text-muted">No notable drivers.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Supply metrics vs market index</h5>
+            <ul class="nav nav-pills" id="classTabs">
+                {% for value, label in classes %}
+                <li class="nav-item">
+                    <a class="nav-link class-tab {% if forloop.first %}active{% endif %}" data-class="{{ value }}">{{ label }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <canvas id="supplyChart" height="100"></canvas>
+    </div>
+</div>
+
+<div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div class="card-body">
+        <h5 class="mb-3">Recent port calls</h5>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Time</th><th>Vessel</th><th>Class</th>
+                        <th>Event</th><th>Port</th><th>Type</th><th>Condition</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ev in events %}
+                    <tr>
+                        <td>{{ ev.timestamp|date:"Y-m-d H:i" }}</td>
+                        <td>{{ ev.vessel.name|default:ev.vessel.mmsi }}</td>
+                        <td>{{ ev.vessel.get_vessel_class_display }}</td>
+                        <td>
+                            {% if ev.event_type == 'arrival' %}
+                            <span class="badge bg-info">Arrival</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Departure</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ ev.port.name }}</td>
+                        <td>{{ ev.port.get_port_type_display }}</td>
+                        <td>{{ ev.get_loading_condition_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted">No port-call events yet. Run the AIS ingester to populate.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const ctx = document.getElementById('supplyChart').getContext('2d');
+    let chart = null;
+
+    const SUPPLY_SERIES = [
+        { key: 'ballast_at_sea_count', label: 'Ballast at sea', color: '#dc3545' },
+        { key: 'laden_at_sea_count', label: 'Laden at sea', color: '#28a745' },
+        { key: 'in_port_load_count', label: 'At load ports', color: '#fd7e14' },
+        { key: 'in_port_discharge_count', label: 'At discharge ports', color: '#6610f2' },
+        { key: 'expected_open_7d', label: 'Expected open (7d)', color: '#20c997' },
+    ];
+
+    function render(data) {
+        const datasets = SUPPLY_SERIES.map(function (s) {
+            return {
+                label: s.label,
+                data: (data.supply[s.key] || []).map(function (y, i) {
+                    return { x: data.labels[i], y: y };
+                }),
+                borderColor: s.color,
+                backgroundColor: s.color,
+                yAxisID: 'ySupply',
+                tension: 0.2,
+                pointRadius: 0,
+            };
+        });
+        if (data.index && data.index.length) {
+            datasets.push({
+                label: data.index_name || 'Index',
+                data: data.index,
+                borderColor: '#1e3c72',
+                borderWidth: 2,
+                borderDash: [6, 3],
+                yAxisID: 'yIndex',
+                tension: 0.2,
+                pointRadius: 0,
+            });
+        }
+        if (chart) { chart.destroy(); }
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: data.labels, datasets: datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { type: 'category' },
+                    ySupply: { type: 'linear', position: 'left', title: { display: true, text: 'Vessel count' } },
+                    yIndex: { type: 'linear', position: 'right', title: { display: true, text: 'Index' }, grid: { drawOnChartArea: false } },
+                },
+            },
+        });
+    }
+
+    function load(vesselClass) {
+        fetch('/supply-forecast/chart-data/' + vesselClass + '/')
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function (e) { console.error('Chart load failed', e); });
+    }
+
+    document.querySelectorAll('.class-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.class-tab').forEach(function (t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            load(tab.getAttribute('data-class'));
+        });
+    });
+
+    const first = document.querySelector('.class-tab');
+    if (first) { load(first.getAttribute('data-class')); }
+});
+</script>
+{% endblock %}

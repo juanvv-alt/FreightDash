@@ -19,6 +19,7 @@ from django.urls import path, include
 from . import views
 
 urlpatterns = [
+    path('', include('supply.urls')),  # /supply-forecast/ (no conflict with voyage)
     path('', include('voyage.urls')),  # TCE Calculator as homepage
     path('admin/', admin.site.urls),
     path('health/', views.health_check, name='health_check'),
