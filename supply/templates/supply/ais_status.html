@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block title %}AIS Status — FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+    .status-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .status-card .card-header { border-radius: 12px 12px 0 0; font-weight: 600; }
+    .banner-ok      { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 14px 18px; }
+    .banner-stale   { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 14px 18px; }
+    .banner-no-data { background: #fff3e0; border: 1px solid #ffcc80; border-radius: 8px; padding: 14px 18px; }
+    .banner-no-key  { background: #ffebee; border: 1px solid #ef9a9a; border-radius: 8px; padding: 14px 18px; }
+    .check-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+    .check-row:last-child { border-bottom: none; }
+    .metric-big { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+    .metric-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: .04em; }
+    .pill-ok    { background: #e8f5e9; color: #2e7d32; border-radius: 20px; padding: 2px 10px; font-size: 0.8rem; font-weight: 600; }
+    .pill-warn  { background: #fff8e1; color: #f57f17; border-radius: 20px; padding: 2px 10px; font-size: 0.8rem; font-weight: 600; }
+    .pill-err   { background: #ffebee; color: #c62828; border-radius: 20px; padding: 2px 10px; font-size: 0.8rem; font-weight: 600; }
+    .how-it-works { font-size: 0.88rem; line-height: 1.65; }
+    .how-it-works h6 { font-weight: 700; margin-top: 1rem; margin-bottom: .3rem; }
+    #ingest-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0"><i class="fas fa-satellite-dish me-2"></i>AIS Pipeline Status</h2>
+    <a href="{% url 'supply:supply_forecast' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Supply Forecast
+    </a>
+</div>
+
+{# ── Overall status banner ── #}
+{% if overall == 'ok' %}
+<div class="banner-ok mb-4">
+    <i class="fas fa-check-circle text-success me-2"></i>
+    <strong>System OK.</strong> AIS data is flowing. Last position update
+    {% if heartbeat_age_s is not None %}
+        {{ heartbeat_age_s|floatformat:0 }}s ago
+        ({% if heartbeat_age_s < 300 %}within expected range{% else %}slightly delayed — check ingest log{% endif %}).
+    {% else %}—{% endif %}
+</div>
+{% elif overall == 'stale' %}
+<div class="banner-stale mb-4">
+    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+    <strong>Stale data.</strong> Last AIS position was
+    {% if heartbeat_age_s %}{{ heartbeat_age_s|floatformat:0 }}s ago{% else %}unknown{% endif %}.
+    Click <strong>Run 5-min Ingest</strong> below to refresh.
+</div>
+{% elif overall == 'no_data' %}
+<div class="banner-no-data mb-4">
+    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+    <strong>No data yet.</strong> The API key is set but no vessel positions have been recorded.
+    Click <strong>Run 5-min Ingest</strong> to pull the first batch of AIS data.
+</div>
+{% else %}
+<div class="banner-no-key mb-4">
+    <i class="fas fa-times-circle text-danger me-2"></i>
+    <strong>AIS API key missing.</strong> Set <code>AISSTREAM_API_KEY</code> in your Render dashboard
+    (Environment → <em>freightdash-web</em> service → Environment Variables) then redeploy.
+    Get a free key at <strong>aisstream.io</strong>.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+
+    {# ── Configuration ── #}
+    <div class="col-md-4">
+        <div class="card status-card h-100">
+            <div class="card-header bg-white">Configuration</div>
+            <div class="card-body">
+                <div class="check-row">
+                    <span>AISSTREAM_API_KEY</span>
+                    {% if api_key_set %}
+                        <span class="pill-ok"><i class="fas fa-check me-1"></i>Set</span>
+                    {% else %}
+                        <span class="pill-err"><i class="fas fa-times me-1"></i>Missing</span>
+                    {% endif %}
+                </div>
+                <div class="check-row">
+                    <span>Pacific ports seeded</span>
+                    {% if port_count >= 30 %}
+                        <span class="pill-ok">{{ port_count }} ports</span>
+                    {% elif port_count > 0 %}
+                        <span class="pill-warn">{{ port_count }} ports</span>
+                    {% else %}
+                        <span class="pill-err">0 — run seed_pacific_ports</span>
+                    {% endif %}
+                </div>
+                <div class="check-row">
+                    <span>Supply snapshots</span>
+                    {% if snapshot_days >= 14 %}
+                        <span class="pill-ok">{{ snapshot_days }} days</span>
+                    {% elif snapshot_days > 0 %}
+                        <span class="pill-warn">{{ snapshot_days }} days (need 14+)</span>
+                    {% else %}
+                        <span class="pill-err">None yet</span>
+                    {% endif %}
+                </div>
+                <div class="check-row">
+                    <span>Latest snapshot</span>
+                    <span class="{% if latest_snapshot_date %}pill-ok{% else %}pill-err{% endif %}">
+                        {{ latest_snapshot_date|default:"—" }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Live ingest health ── #}
+    <div class="col-md-4">
+        <div class="card status-card h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <span>Live Ingest Health</span>
+                {% if ingest_running %}
+                    <span class="badge bg-primary"><i class="fas fa-spinner fa-spin me-1"></i>Running</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row g-2 text-center mb-3">
+                    <div class="col-6">
+                        <div class="metric-big">{{ total_vessels }}</div>
+                        <div class="metric-label">Total vessels</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-big">{{ vessels_24h }}</div>
+                        <div class="metric-label">Active (24h)</div>
+                    </div>
+                </div>
+                <div class="check-row">
+                    <span>Last AIS position</span>
+                    <span>
+                        {% if last_heartbeat %}
+                            {{ last_heartbeat|date:"d M H:i" }} UTC
+                        {% else %}
+                            <em class="text-muted">None</em>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="check-row">
+                    <span>Port call events (24h)</span>
+                    <span>{{ events_24h }}</span>
+                </div>
+                {% if last_triggered %}
+                <div class="check-row">
+                    <span>Last manual trigger</span>
+                    <span class="text-muted" style="font-size:.8rem">{{ last_triggered }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── Latest signals ── #}
+    <div class="col-md-4">
+        <div class="card status-card h-100">
+            <div class="card-header bg-white">Latest Supply Signals</div>
+            <div class="card-body">
+                {% if latest_signals %}
+                    {% for sig in latest_signals %}
+                    <div class="check-row">
+                        <span class="text-capitalize">{{ sig.vessel_class }}</span>
+                        <span>
+                            <span class="badge {% if sig.direction == 'bullish' %}bg-success{% elif sig.direction == 'bearish' %}bg-danger{% else %}bg-secondary{% endif %} me-1">
+                                {{ sig.direction }}
+                            </span>
+                            <small class="text-muted">{{ sig.date }}</small>
+                        </span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted mb-0 small">No signals yet. Run ingest for 14+ days then trigger aggregation.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Manual controls ── #}
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card status-card">
+            <div class="card-header bg-white">Run AIS Ingest (5 min)</div>
+            <div class="card-body">
+                <p class="small text-muted mb-3">
+                    Connects to aisstream.io and streams live vessel positions for 5 minutes.
+                    Triggers geofence detection and updates vessel states in the database.
+                    {% if not api_key_set %}<strong class="text-danger">Requires AISSTREAM_API_KEY to be set.</strong>{% endif %}
+                </p>
+                <button id="ingest-btn"
+                        class="btn btn-primary"
+                        {% if not api_key_set %}disabled{% endif %}
+                        {% if ingest_running %}disabled{% endif %}>
+                    {% if ingest_running %}
+                        <i class="fas fa-spinner fa-spin me-2"></i>Ingesting…
+                    {% else %}
+                        <i class="fas fa-play me-2"></i>Run 5-min Ingest
+                    {% endif %}
+                </button>
+                <div id="ingest-status" class="mt-2 small text-muted"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card status-card">
+            <div class="card-header bg-white">Run Daily Aggregation</div>
+            <div class="card-body">
+                <p class="small text-muted mb-3">
+                    Builds today's <code>DailySupplySnapshot</code> and <code>SupplySignal</code> rows from
+                    current vessel states. Takes a few seconds. Run this once per day after ingesting.
+                </p>
+                <button id="agg-btn" class="btn btn-outline-primary">
+                    <i class="fas fa-calculator me-2"></i>Run Aggregation
+                </button>
+                <div id="agg-status" class="mt-2 small text-muted"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── How it works ── #}
+<div class="card status-card mb-4">
+    <div class="card-header bg-white">
+        <i class="fas fa-book-open me-2"></i>How AIS Data Predicts Vessel Supply
+    </div>
+    <div class="card-body how-it-works">
+
+        <h6>Data Source</h6>
+        <p>
+            AIS (Automatic Identification System) is a maritime safety standard — every vessel &gt;300 GT
+            broadcasts its position, speed, heading, and identity every few seconds via VHF radio.
+            This app consumes a live stream from <strong>aisstream.io</strong> (free tier) via WebSocket,
+            filtered to two Pacific bounding boxes covering SE Asia / Australia and China / Japan / Korea / Taiwan.
+        </p>
+
+        <h6>What Gets Filtered In</h6>
+        <p>
+            Only <strong>dry-bulk cargo vessels</strong> (AIS ship type 70–79) are kept. Tankers,
+            containers, and passengers are dropped. Vessels are then classified by size using AIS dimension
+            fields (length = A + B):
+        </p>
+        <table class="table table-sm table-bordered mb-3" style="font-size:.85rem; max-width:480px">
+            <thead class="table-light"><tr><th>Class</th><th>Length (primary)</th><th>Draught (fallback)</th></tr></thead>
+            <tbody>
+                <tr><td>Capesize</td><td>≥ 270 m</td><td>≥ 16.5 m</td></tr>
+                <tr><td>Panamax</td><td>215–270 m</td><td>13.5–16.5 m</td></tr>
+                <tr><td>Supramax</td><td>185–215 m</td><td>12.0–13.5 m</td></tr>
+                <tr><td>Handysize</td><td>150–185 m</td><td>9.0–12.0 m</td></tr>
+            </tbody>
+        </table>
+
+        <h6>Laden vs Ballast Detection</h6>
+        <p>
+            Each vessel's maximum observed draught is tracked over time. If the current draught is
+            ≥ 80 % of that maximum, the vessel is classified <strong>laden</strong> (carrying cargo);
+            below that threshold it is <strong>ballast</strong> (empty, heading to a load port).
+        </p>
+
+        <h6>Geofencing &amp; Port Calls</h6>
+        <p>
+            33 Pacific ports have geofences (15–25 nm radius). When a vessel crosses a fence boundary,
+            an <strong>arrival</strong> or <strong>departure</strong> event is recorded. Arrivals at
+            load ports (e.g. Port Hedland, Newcastle) combined with ballast status indicate
+            <em>prompt supply</em>; departures laden indicate cargo being lifted.
+        </p>
+
+        <h6>Efficient DB Writes</h6>
+        <p>
+            To avoid writing every AIS ping to the database, a position update is persisted only when
+            something meaningful happens: vessel moves &gt; 5 nm, draught changes ≥ 0.3 m, a geofence
+            is crossed, or 30 minutes elapse. This keeps write volume low without losing accuracy.
+        </p>
+
+        <h6>Daily Aggregation → Supply Signals</h6>
+        <p>
+            Once a day (<em>trigger manually or set up a daily cron</em>), <code>aggregate_supply</code>
+            counts vessels by class and state:
+        </p>
+        <ul>
+            <li><strong>Ballast at sea</strong> — future demand for cargo</li>
+            <li><strong>Laden at sea</strong> — cargo on the water, adding to voyage supply</li>
+            <li><strong>At load ports</strong> — being loaded; reduces near-term open supply</li>
+            <li><strong>At discharge ports</strong> — about to become open</li>
+            <li><strong>Expected open (7d / 14d)</strong> — vessels expected to complete voyages in that window</li>
+        </ul>
+        <p>
+            A directional <strong>supply signal</strong> (bullish / bearish / neutral, score −3 to +3)
+            is then computed per class by correlating these supply metrics against the corresponding
+            Baltic Exchange index (BCI 5TC for capesize, BPI 82TC for panamax, BSI 58TC for supramax,
+            BHSI 38TC for handysize). With &lt;14 days of history the signal is <em>insufficient</em>;
+            14 days–8 weeks it uses a z-score heuristic; beyond 8 weeks a regression model takes over.
+        </p>
+
+        <h6>Limitations</h6>
+        <ul>
+            <li>At-sea counts <strong>undercount mid-ocean vessels</strong> — terrestrial AIS has limited range; only vessels near coast or receiving satellite AIS pass through.</li>
+            <li>In-port counts and port-call events are most reliable (vessels stay near coast).</li>
+            <li>Manual ingestion gaps (between button presses) mean some voyages are missed; signals improve with more frequent data collection.</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const ingestBtn = document.getElementById('ingest-btn');
+    const ingestStatus = document.getElementById('ingest-status');
+    const aggBtn = document.getElementById('agg-btn');
+    const aggStatus = document.getElementById('agg-status');
+    const statusUrl = "{% url 'supply:ais_status' %}?format=json";
+    const triggerUrl = "{% url 'supply:trigger_ingest' %}";
+    const aggUrl = "{% url 'supply:trigger_aggregate' %}";
+    let pollTimer = null;
+
+    function getCsrf() {
+        const m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(async () => {
+            try {
+                const r = await fetch(statusUrl);
+                const d = await r.json();
+                if (!d.ingest_running) {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    ingestBtn.disabled = false;
+                    ingestBtn.innerHTML = '<i class="fas fa-play me-2"></i>Run 5-min Ingest';
+                    ingestStatus.textContent = `Done. ${d.total_vessels} vessels tracked, ${d.vessels_24h} active in 24h. Reload to see updated metrics.`;
+                } else {
+                    const age = d.heartbeat_age_s ? `last position ${Math.round(d.heartbeat_age_s)}s ago` : 'connecting…';
+                    ingestStatus.textContent = `Ingesting… ${age}`;
+                }
+            } catch (e) {}
+        }, 10000);
+    }
+
+    {% if ingest_running %}
+    startPolling();
+    {% endif %}
+
+    if (ingestBtn) {
+        ingestBtn.addEventListener('click', async () => {
+            ingestBtn.disabled = true;
+            ingestBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Ingesting…';
+            ingestStatus.textContent = 'Connecting to aisstream.io…';
+            try {
+                const r = await fetch(triggerUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrf() },
+                });
+                const d = await r.json();
+                if (d.status === 'already_running') {
+                    ingestStatus.textContent = `Already running (started ${d.started_at}).`;
+                } else if (d.status === 'started') {
+                    startPolling();
+                } else {
+                    ingestStatus.textContent = `Error: ${JSON.stringify(d)}`;
+                    ingestBtn.disabled = false;
+                    ingestBtn.innerHTML = '<i class="fas fa-play me-2"></i>Run 5-min Ingest';
+                }
+            } catch (e) {
+                ingestStatus.textContent = 'Network error — try again.';
+                ingestBtn.disabled = false;
+                ingestBtn.innerHTML = '<i class="fas fa-play me-2"></i>Run 5-min Ingest';
+            }
+        });
+    }
+
+    if (aggBtn) {
+        aggBtn.addEventListener('click', async () => {
+            aggBtn.disabled = true;
+            aggBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Running…';
+            aggStatus.textContent = 'Building snapshots and signals…';
+            try {
+                const r = await fetch(aggUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrf() },
+                });
+                const d = await r.json();
+                aggStatus.textContent = d.status === 'done'
+                    ? `Done for ${d.date}. Reload to see updated signals.`
+                    : `Error: ${JSON.stringify(d)}`;
+            } catch (e) {
+                aggStatus.textContent = 'Network error — try again.';
+            }
+            aggBtn.disabled = false;
+            aggBtn.innerHTML = '<i class="fas fa-calculator me-2"></i>Run Aggregation';
+        });
+    }
+})();
+</script>
+{% endblock %}

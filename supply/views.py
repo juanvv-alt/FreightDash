@@ -1,6 +1,10 @@
+import asyncio
+import threading
 from collections import defaultdict
 from datetime import timedelta
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Max
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -10,8 +14,10 @@ from voyage.models import DailyIndexValue
 
 from .aggregation import week_over_week
 from .analytics import CLASS_INDEX_MAP, generate_signal
-from .models import (SNAPSHOT_CLASSES, DailySupplySnapshot, PortCallEvent,
+from .models import (SNAPSHOT_CLASSES, DailySupplySnapshot, Port, PortCallEvent,
                      SupplySignal, TrackedVessel, VesselState)
+
+_ingest_lock = threading.Lock()
 
 CLASS_LABELS = {
     "capesize": "Capesize",
@@ -176,3 +182,130 @@ def supply_chart_data(request, vessel_class):
             "index": index_points,
         }
     )
+
+
+def trigger_ingest(request):
+    """POST-only: kick off a 5-min AIS ingest in a daemon background thread."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    if cache.get("ais_ingest_running"):
+        return JsonResponse(
+            {
+                "status": "already_running",
+                "started_at": cache.get("ais_ingest_started", ""),
+            }
+        )
+
+    if not _ingest_lock.acquire(blocking=False):
+        return JsonResponse({"status": "already_running"})
+
+    def _run():
+        try:
+            cache.set("ais_ingest_running", True, timeout=400)
+            cache.set("ais_ingest_started", timezone.now().isoformat(), timeout=400)
+            from .geo import load_port_geos
+            from .ingest import AISIngestor
+
+            api_key = getattr(settings, "AISSTREAM_API_KEY", "")
+            ingestor = AISIngestor(api_key=api_key, ports=load_port_geos())
+            asyncio.run(ingestor.run(duration_seconds=300))
+        finally:
+            cache.delete("ais_ingest_running")
+            cache.set(
+                "ais_ingest_last_triggered", timezone.now().isoformat(), timeout=86400
+            )
+            _ingest_lock.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return JsonResponse({"status": "started"})
+
+
+def trigger_aggregate(request):
+    """POST-only: run today's supply aggregation in the foreground (fast, <5s)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    from .aggregation import build_snapshot
+    from .analytics import generate_signal, persist_signal
+
+    today = timezone.localdate()
+    build_snapshot(today, basin="pacific")
+    for vc in SNAPSHOT_CLASSES:
+        result = generate_signal(vc, as_of=today)
+        persist_signal(result, today)
+    return JsonResponse({"status": "done", "date": today.isoformat()})
+
+
+def ais_status(request):
+    now = timezone.now()
+    api_key_set = bool(getattr(settings, "AISSTREAM_API_KEY", ""))
+    port_count = Port.objects.filter(is_active=True).count()
+
+    last_heartbeat = VesselState.objects.aggregate(m=Max("updated_at"))["m"]
+    heartbeat_age_s = (
+        (now - last_heartbeat).total_seconds() if last_heartbeat else None
+    )
+
+    total_vessels = TrackedVessel.objects.filter(is_excluded=False).count()
+    vessels_24h = TrackedVessel.objects.filter(
+        last_seen__gte=now - timedelta(hours=24), is_excluded=False
+    ).count()
+
+    events_24h = PortCallEvent.objects.filter(
+        timestamp__gte=now - timedelta(hours=24)
+    ).count()
+
+    latest_snapshot_date = DailySupplySnapshot.objects.aggregate(m=Max("date"))["m"]
+    snapshot_days = DailySupplySnapshot.objects.filter(vessel_class="all").count()
+
+    latest_signal_date = SupplySignal.objects.aggregate(m=Max("date"))["m"]
+    latest_signals = (
+        list(
+            SupplySignal.objects.filter(date=latest_signal_date).order_by(
+                "vessel_class"
+            )
+        )
+        if latest_signal_date
+        else []
+    )
+
+    ingest_running = bool(cache.get("ais_ingest_running"))
+    last_triggered = cache.get("ais_ingest_last_triggered")
+
+    if not api_key_set:
+        overall = "no_key"
+    elif last_heartbeat is None:
+        overall = "no_data"
+    elif heartbeat_age_s is not None and heartbeat_age_s > 7200:
+        overall = "stale"
+    else:
+        overall = "ok"
+
+    if request.GET.get("format") == "json":
+        return JsonResponse(
+            {
+                "overall": overall,
+                "ingest_running": ingest_running,
+                "last_triggered": last_triggered,
+                "total_vessels": total_vessels,
+                "vessels_24h": vessels_24h,
+                "heartbeat_age_s": heartbeat_age_s,
+            }
+        )
+
+    context = {
+        "api_key_set": api_key_set,
+        "port_count": port_count,
+        "last_heartbeat": last_heartbeat,
+        "heartbeat_age_s": heartbeat_age_s,
+        "total_vessels": total_vessels,
+        "vessels_24h": vessels_24h,
+        "events_24h": events_24h,
+        "latest_snapshot_date": latest_snapshot_date,
+        "snapshot_days": snapshot_days,
+        "latest_signals": latest_signals,
+        "overall": overall,
+        "ingest_running": ingest_running,
+        "last_triggered": last_triggered,
+    }
+    return render(request, "supply/ais_status.html", context)
