@@ -189,6 +189,12 @@ def trigger_ingest(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
+    if not getattr(settings, "AISSTREAM_API_KEY", ""):
+        return JsonResponse(
+            {"error": "AISSTREAM_API_KEY is not set — add it in the Render dashboard under Environment Variables."},
+            status=400,
+        )
+
     if cache.get("ais_ingest_running"):
         return JsonResponse(
             {
@@ -271,6 +277,8 @@ def ais_status(request):
 
     ingest_running = bool(cache.get("ais_ingest_running"))
     last_triggered = cache.get("ais_ingest_last_triggered")
+    last_stats = cache.get("ais_last_stats")
+    last_stats_time = cache.get("ais_last_stats_time")
 
     if not api_key_set:
         overall = "no_key"
@@ -307,5 +315,7 @@ def ais_status(request):
         "overall": overall,
         "ingest_running": ingest_running,
         "last_triggered": last_triggered,
+        "last_stats": last_stats,
+        "last_stats_time": last_stats_time,
     }
     return render(request, "supply/ais_status.html", context)

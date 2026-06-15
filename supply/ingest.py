@@ -162,6 +162,9 @@ class AISIngestor:
         elif msg_type == "PositionReport":
             self.stats.position_messages += 1
             self._handle_position(meta, body)
+        else:
+            # Log unexpected types — catches auth errors / API responses from aisstream.io
+            logger.warning("AIS unhandled message type %r: %s", msg_type, str(msg)[:300])
 
     def _cached(self, mmsi: int) -> CachedVessel:
         cv = self.cache.get(mmsi)
@@ -403,10 +406,13 @@ class AISIngestor:
             "BoundingBoxes": PACIFIC_BOUNDING_BOXES,
             "FilterMessageTypes": ["PositionReport", "ShipStaticData"],
         }
-        process = sync_to_async(self.process_message, thread_sensitive=True)
+        # thread_sensitive=False: safe for WSGI daemon threads; each call gets its
+        # own thread-pool thread with its own Django DB connection.
+        process = sync_to_async(self.process_message, thread_sensitive=False)
 
         while not self._stop:
             if deadline and timezone.now().timestamp() >= deadline:
+                self._log_stats()
                 return
             try:
                 async with websockets.connect(AISSTREAM_URL, ping_interval=20) as ws:
@@ -417,6 +423,7 @@ class AISIngestor:
                     backoff = 5
                     async for raw in ws:
                         if deadline and timezone.now().timestamp() >= deadline:
+                            self._log_stats()
                             return
                         try:
                             msg = json.loads(raw)
@@ -424,13 +431,16 @@ class AISIngestor:
                             continue
                         await process(msg)
                         if self._stop:
+                            self._log_stats()
                             return
             except asyncio.CancelledError:
+                self._log_stats()
                 raise
             except Exception as exc:  # reconnect on any transport error
                 self._log(f"AIS stream error: {exc!r}; reconnecting in {backoff}s")
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 300)
+        self._log_stats()
 
     def stop(self) -> None:
         self._stop = True
@@ -438,4 +448,22 @@ class AISIngestor:
     def _log(self, message: str) -> None:
         if self.stdout is not None:
             self.stdout.write(message)
-        logger.info(message)
+        logger.warning(message)
+
+    def _log_stats(self) -> None:
+        stats = self.stats.as_dict()
+        msg = (
+            f"AIS ingest session complete — "
+            f"{stats['messages']} messages received "
+            f"({stats['position_messages']} positions, {stats['static_messages']} static, "
+            f"{stats['skipped_non_bulk']} skipped non-bulk), "
+            f"{stats['vessels']} vessels, {stats['state_writes']} DB writes, "
+            f"{stats['arrivals']} arrivals, {stats['departures']} departures"
+        )
+        self._log(msg)
+        try:
+            from django.core.cache import cache
+            cache.set("ais_last_stats", stats, timeout=86400)
+            cache.set("ais_last_stats_time", timezone.now().isoformat(), timeout=86400)
+        except Exception:
+            pass

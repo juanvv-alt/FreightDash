@@ -219,6 +219,59 @@
     </div>
 </div>
 
+{# ── Last ingest stats ── #}
+{% if last_stats %}
+<div class="card status-card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-chart-bar me-2"></i>Last Ingest Session</span>
+        <small class="text-muted">{{ last_stats_time }}</small>
+    </div>
+    <div class="card-body">
+        <div class="row g-2 text-center">
+            <div class="col">
+                <div class="metric-big {% if last_stats.messages == 0 %}text-danger{% endif %}">{{ last_stats.messages }}</div>
+                <div class="metric-label">Messages</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.position_messages }}</div>
+                <div class="metric-label">Positions</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.static_messages }}</div>
+                <div class="metric-label">Static</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.skipped_non_bulk }}</div>
+                <div class="metric-label">Skipped</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.vessels }}</div>
+                <div class="metric-label">Vessels</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.state_writes }}</div>
+                <div class="metric-label">DB writes</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.arrivals }}</div>
+                <div class="metric-label">Arrivals</div>
+            </div>
+            <div class="col">
+                <div class="metric-big">{{ last_stats.departures }}</div>
+                <div class="metric-label">Departures</div>
+            </div>
+        </div>
+        {% if last_stats.messages == 0 %}
+        <div class="mt-3 small text-danger">
+            <i class="fas fa-exclamation-circle me-1"></i>
+            Zero messages received — the connection was likely rejected. Check that
+            <code>AISSTREAM_API_KEY</code> is valid. See Render logs for the exact error.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {# ── How it works ── #}
 <div class="card status-card mb-4">
     <div class="card-header bg-white">
@@ -354,7 +407,11 @@
                     headers: { 'X-CSRFToken': getCsrf() },
                 });
                 const d = await r.json();
-                if (d.status === 'already_running') {
+                if (!r.ok) {
+                    ingestStatus.innerHTML = `<span class="text-danger">${d.error || JSON.stringify(d)}</span>`;
+                    ingestBtn.disabled = false;
+                    ingestBtn.innerHTML = '<i class="fas fa-play me-2"></i>Run 5-min Ingest';
+                } else if (d.status === 'already_running') {
                     ingestStatus.textContent = `Already running (started ${d.started_at}).`;
                 } else if (d.status === 'started') {
                     startPolling();
