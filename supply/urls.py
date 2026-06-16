@@ -6,6 +6,7 @@ app_name = "supply"
 
 urlpatterns = [
     path("supply-forecast/", views.supply_forecast, name="supply_forecast"),
+    path("supply-forecast/fleet/", views.vessel_fleet, name="vessel_fleet"),
     path(
         "supply-forecast/chart-data/<slug:vessel_class>/",
         views.supply_chart_data,

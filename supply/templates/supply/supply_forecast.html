@@ -63,7 +63,10 @@
                 </div>
                 <div class="text-muted mb-2" style="font-size:0.75rem;">
                     Method: {{ card.signal.method }} &middot; {{ card.signal.data_days }}d data
-                    {% if card.index_name %}&middot; vs {{ card.index_name }}{% endif %}
+                    {% if card.index_name %}&middot; Pacific: {{ card.index_name }}{% endif %}
+                    {% if card.market_index_name and card.market_index_name != card.index_name %}
+                    &middot; Market: {{ card.market_index_name }}
+                    {% endif %}
                 </div>
 
                 {% if card.deltas %}

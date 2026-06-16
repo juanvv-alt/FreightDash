@@ -193,6 +193,7 @@ class SupplySignal(models.Model):
     METHOD_CHOICES = [
         ("regression", "Regression"),
         ("zscore", "Z-score heuristic"),
+        ("snapshot", "Snapshot ratio (cold start)"),
         ("insufficient", "Insufficient data"),
     ]
 

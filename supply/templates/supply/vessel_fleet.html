@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+
+{% block title %}Vessel Fleet — AIS Forecast{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #fleet-map { height: 480px; border-radius: 12px; }
+    .stat-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .stat-big { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+    .stat-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: .04em; }
+    .class-badge-capesize  { background:#1e3c72; color:#fff; }
+    .class-badge-panamax   { background:#2196f3; color:#fff; }
+    .class-badge-supramax  { background:#ff9800; color:#fff; }
+    .class-badge-handysize { background:#4caf50; color:#fff; }
+    .class-badge-unknown   { background:#9e9e9e; color:#fff; }
+    .cond-laden   { color:#28a745; font-weight:600; }
+    .cond-ballast { color:#dc3545; font-weight:600; }
+    .cond-unknown { color:#6c757d; }
+    .legend-dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:5px; }
+    #fleet-table th { white-space: nowrap; cursor: pointer; }
+    #fleet-table th::after { content: ' ↕'; color: #ccc; font-size: .7rem; }
+    .filter-bar { gap: 8px; flex-wrap: wrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0"><i class="fas fa-ship me-2"></i>Vessel Fleet</h2>
+    <div class="d-flex gap-2">
+        <a href="{% url 'supply:supply_forecast' %}" class="btn btn-sm btn-outline-secondary">Supply Signals</a>
+        <a href="{% url 'supply:ais_status' %}" class="btn btn-sm btn-outline-secondary">AIS Status</a>
+    </div>
+</div>
+
+{# ── Summary stat row ── #}
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card stat-card p-3 text-center">
+            <div class="stat-big">{{ total }}</div>
+            <div class="stat-label">Total tracked</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card stat-card p-3 text-center">
+            <div class="stat-big">{{ fresh_count }}</div>
+            <div class="stat-label">Active (48h)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card stat-card p-3 text-center">
+            <div class="stat-big">{{ at_sea }}</div>
+            <div class="stat-label">At sea</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card stat-card p-3 text-center">
+            <div class="stat-big">{{ in_port_count }}</div>
+            <div class="stat-label">In port</div>
+        </div>
+    </div>
+    {% for item in class_breakdown %}
+    <div class="col-6 col-md-2 col-xl">
+        <div class="card stat-card p-3 text-center">
+            <div class="stat-big">{{ item.count }}</div>
+            <div class="stat-label">{{ item.label }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{# ── Map ── #}
+<div class="card mb-4" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+    <div class="card-body p-2">
+        <div class="d-flex justify-content-between align-items-center px-2 pb-2">
+            <div class="d-flex align-items-center gap-3 flex-wrap" style="font-size:.85rem;">
+                <span><span class="legend-dot" style="background:#28a745"></span>Laden</span>
+                <span><span class="legend-dot" style="background:#dc3545"></span>Ballast</span>
+                <span><span class="legend-dot" style="background:#6c757d"></span>Unknown</span>
+                <span><span class="legend-dot" style="background:#1e3c72;border:2px solid #fff;box-shadow:0 0 0 1px #1e3c72;"></span>Load port</span>
+                <span><span class="legend-dot" style="background:#e65100;border:2px solid #fff;box-shadow:0 0 0 1px #e65100;"></span>Discharge port</span>
+            </div>
+            <div class="btn-group btn-group-sm" role="group">
+                <button id="color-cond" class="btn btn-outline-primary active" onclick="setColorMode('cond')">By condition</button>
+                <button id="color-cls" class="btn btn-outline-primary" onclick="setColorMode('cls')">By class</button>
+            </div>
+        </div>
+        <div id="fleet-map"></div>
+    </div>
+</div>
+
+{# ── Vessel table ── #}
+<div class="card" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h5 class="mb-0">Tracked Vessels ({{ total }})</h5>
+            <div class="d-flex filter-bar">
+                <select id="filter-class" class="form-select form-select-sm" style="width:auto;">
+                    <option value="">All classes</option>
+                    <option value="capesize">Capesize</option>
+                    <option value="panamax">Panamax</option>
+                    <option value="supramax">Supramax</option>
+                    <option value="handysize">Handysize</option>
+                    <option value="unknown">Unknown</option>
+                </select>
+                <select id="filter-cond" class="form-select form-select-sm" style="width:auto;">
+                    <option value="">All conditions</option>
+                    <option value="laden">Laden</option>
+                    <option value="ballast">Ballast</option>
+                    <option value="unknown">Unknown</option>
+                </select>
+                <select id="filter-loc" class="form-select form-select-sm" style="width:auto;">
+                    <option value="">All locations</option>
+                    <option value="sea">At sea</option>
+                    <option value="port">In port</option>
+                </select>
+                <input id="filter-search" type="search" class="form-control form-control-sm" placeholder="Search name/MMSI…" style="width:160px;">
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="fleet-table" class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Vessel</th>
+                        <th>MMSI</th>
+                        <th>Class</th>
+                        <th>Condition</th>
+                        <th>Location</th>
+                        <th>Speed (kn)</th>
+                        <th>Length (m)</th>
+                        <th>Last position</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in states %}
+                    <tr data-cls="{{ s.vessel.vessel_class }}"
+                        data-cond="{{ s.loading_condition }}"
+                        data-loc="{% if s.current_port_id %}port{% else %}sea{% endif %}">
+                        <td>
+                            <strong>{{ s.vessel.name|default:"—" }}</strong>
+                        </td>
+                        <td class="text-muted">{{ s.vessel.mmsi }}</td>
+                        <td>
+                            <span class="badge class-badge-{{ s.vessel.vessel_class }} text-capitalize">
+                                {{ s.vessel.get_vessel_class_display }}
+                            </span>
+                        </td>
+                        <td class="cond-{{ s.loading_condition }} text-capitalize">
+                            {{ s.loading_condition }}
+                        </td>
+                        <td>
+                            {% if s.current_port %}
+                                <i class="fas fa-anchor me-1 text-primary" style="font-size:.75rem;"></i>
+                                {{ s.current_port.name }}
+                            {% else %}
+                                <span class="text-muted">At sea
+                                    {% if s.latitude %}({{ s.latitude|floatformat:1 }}°, {{ s.longitude|floatformat:1 }}°){% endif %}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>{{ s.speed_knots|floatformat:1|default:"—" }}</td>
+                        <td>{{ s.vessel.length_m|floatformat:0|default:"—" }}</td>
+                        <td class="text-muted" style="font-size:.78rem;">
+                            {{ s.position_at|date:"d M H:i" }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            No vessels tracked yet. Run the AIS ingest to start accumulating data.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{# ── Recent port call events ── #}
+{% if recent_events %}
+<div class="card mt-4" style="border:none;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+    <div class="card-body">
+        <h5 class="mb-3">Port Calls (last 24h)</h5>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
+                <thead class="table-light">
+                    <tr><th>Time</th><th>Vessel</th><th>Class</th><th>Event</th><th>Port</th><th>Type</th><th>Condition</th></tr>
+                </thead>
+                <tbody>
+                    {% for ev in recent_events %}
+                    <tr>
+                        <td class="text-muted">{{ ev.timestamp|date:"d M H:i" }}</td>
+                        <td><strong>{{ ev.vessel.name|default:ev.vessel.mmsi }}</strong></td>
+                        <td><span class="badge class-badge-{{ ev.vessel.vessel_class }} text-capitalize">{{ ev.vessel.get_vessel_class_display }}</span></td>
+                        <td>{% if ev.event_type == 'arrival' %}<span class="badge bg-info">Arrival</span>{% else %}<span class="badge bg-secondary">Departure</span>{% endif %}</td>
+                        <td>{{ ev.port.name }}</td>
+                        <td class="text-muted">{{ ev.port.get_port_type_display }}</td>
+                        <td class="cond-{{ ev.loading_condition }} text-capitalize">{{ ev.loading_condition }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    const VESSELS = {{ vessel_geo_json|safe }};
+    const PORTS   = {{ ports_json|safe }};
+
+    // ── Colours ──
+    const COND_COLOUR = { laden: '#28a745', ballast: '#dc3545', unknown: '#6c757d' };
+    const CLS_COLOUR  = { capesize: '#1e3c72', panamax: '#2196f3', supramax: '#ff9800', handysize: '#4caf50', unknown: '#9e9e9e' };
+    let colorMode = 'cond';
+
+    function vesselColor(v) {
+        return colorMode === 'cls' ? (CLS_COLOUR[v.cls] || '#9e9e9e') : (COND_COLOUR[v.cond] || '#6c757d');
+    }
+
+    // ── Map ──
+    const map = L.map('fleet-map').setView([10, 130], 3);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 16
+    }).addTo(map);
+
+    // Port geofences
+    PORTS.forEach(p => {
+        const colour = p.port_type === 'load' ? '#1e3c72' : '#e65100';
+        L.circle([p.latitude, p.longitude], {
+            radius: p.radius_nm * 1852,
+            color: colour, weight: 1, fillOpacity: 0.08, fillColor: colour
+        }).bindTooltip(p.name + ' (' + p.port_type + ')', { permanent: false }).addTo(map);
+        L.circleMarker([p.latitude, p.longitude], {
+            radius: 4, color: colour, fillColor: colour, fillOpacity: 0.9, weight: 2
+        }).addTo(map);
+    });
+
+    // Vessel markers
+    let markers = [];
+    function buildMarkers() {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        VESSELS.forEach(v => {
+            const col = vesselColor(v);
+            const m = L.circleMarker([v.lat, v.lon], {
+                radius: v.cond === 'laden' ? 5 : 4,
+                color: col, fillColor: col, fillOpacity: 0.85, weight: 1
+            });
+            const portLine = v.port ? `<br><i class="fas fa-anchor"></i> ${v.port}` : ' (at sea)';
+            const speedLine = v.spd != null ? `<br>Speed: ${v.spd} kn` : '';
+            const lenLine = v.len ? `<br>Length: ${v.len} m` : '';
+            m.bindPopup(
+                `<strong>${v.name}</strong><br>` +
+                `MMSI: ${v.mmsi}<br>` +
+                `Class: ${v.cls} | ${v.cond}` +
+                portLine + speedLine + lenLine
+            );
+            m.addTo(map);
+            markers.push(m);
+        });
+    }
+    buildMarkers();
+
+    window.setColorMode = function(mode) {
+        colorMode = mode;
+        document.getElementById('color-cond').classList.toggle('active', mode === 'cond');
+        document.getElementById('color-cls').classList.toggle('active', mode === 'cls');
+        buildMarkers();
+    };
+
+    // ── Table filtering ──
+    const rows = Array.from(document.querySelectorAll('#fleet-table tbody tr[data-cls]'));
+    function applyFilters() {
+        const cls   = document.getElementById('filter-class').value;
+        const cond  = document.getElementById('filter-cond').value;
+        const loc   = document.getElementById('filter-loc').value;
+        const query = document.getElementById('filter-search').value.toLowerCase();
+        rows.forEach(r => {
+            const show =
+                (!cls  || r.dataset.cls  === cls)  &&
+                (!cond || r.dataset.cond === cond) &&
+                (!loc  || r.dataset.loc  === loc)  &&
+                (!query || r.textContent.toLowerCase().includes(query));
+            r.style.display = show ? '' : 'none';
+        });
+    }
+    ['filter-class','filter-cond','filter-loc','filter-search'].forEach(id => {
+        document.getElementById(id).addEventListener('input', applyFilters);
+    });
+
+    // ── Simple table sort ──
+    document.querySelectorAll('#fleet-table th').forEach((th, i) => {
+        let asc = true;
+        th.addEventListener('click', () => {
+            const tbody = document.querySelector('#fleet-table tbody');
+            const sorted = rows.slice().sort((a, b) => {
+                const av = a.cells[i]?.textContent.trim() || '';
+                const bv = b.cells[i]?.textContent.trim() || '';
+                return asc ? av.localeCompare(bv, undefined, {numeric: true})
+                           : bv.localeCompare(av, undefined, {numeric: true});
+            });
+            asc = !asc;
+            sorted.forEach(r => tbody.appendChild(r));
+        });
+    });
+})();
+</script>
+{% endblock %}

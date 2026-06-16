@@ -22,8 +22,18 @@ import pandas as pd
 
 from .models import DailySupplySnapshot, SupplySignal
 
-# TC index per class -- these names exist in voyage.AvailableIndex (migration 0003).
+# Pacific-route index per class — used for signal regression/correlation.
+# Panamax uses P3A_82 (Japan/Korea ↔ Pacific) rather than global BPI 82TC
+# because our supply universe is Pacific basin only.
 CLASS_INDEX_MAP = {
+    "capesize": "BCI 5TC",
+    "panamax": "P3A_82",
+    "supramax": "BSI 58TC",
+    "handysize": "BHSI 38TC",
+}
+
+# Broad market reference shown alongside the signal (informational only).
+CLASS_MARKET_INDEX_MAP = {
     "capesize": "BCI 5TC",
     "panamax": "BPI 82TC",
     "supramax": "BSI 58TC",
@@ -245,6 +255,35 @@ def _direction_from_score(score):
     return "neutral"
 
 
+def _snapshot_signal(supply_df):
+    """Ratio-based signal from the latest snapshot row.
+
+    Used when we have 1–13 days of history — not enough for z-scores but enough
+    to say something directional. Score is derived from the share of tonnage in
+    each state (ballast heavy → bearish; vessels at load ports → bullish).
+    Confidence is capped at 0.25 since there's no trend context.
+    """
+    latest = supply_df.iloc[-1]
+    total = max(1.0, sum(float(latest.get(m, 0) or 0) for m in SUPPLY_METRICS))
+
+    score = 0.0
+    for m in SUPPLY_METRICS:
+        val = float(latest.get(m, 0) or 0)
+        score += METRIC_SIGN[m] * (val / total) * 3  # normalise then scale to ±3
+    score = float(np.clip(score / len(SUPPLY_METRICS), -3, 3))
+
+    drivers = [
+        f"{int(latest.get(m, 0) or 0)} {METRIC_LABEL[m]}"
+        + (" → bearish pressure" if METRIC_SIGN[m] < 0 else " → bullish pressure")
+        for m in SUPPLY_METRICS
+        if (latest.get(m, 0) or 0) > 0
+    ]
+    drivers.append(
+        "Signal from today's snapshot only — accuracy improves as history accumulates."
+    )
+    return score, drivers
+
+
 def _zscore_signal(supply_df):
     """Score from latest 28-day z-scores weighted by sign convention.
 
@@ -297,14 +336,23 @@ def generate_signal(vessel_class, as_of=None, basin="pacific"):
         result.ffa_stance = ffa["stance"]
 
     if result.data_days < MIN_DATA_DAYS:
-        result.method = "insufficient"
-        result.direction = "neutral"
-        result.confidence = min(0.1, result.data_days / 200.0)
-        result.drivers = [
-            f"Only {result.data_days} day(s) of AIS history accumulated; "
-            f"need {MIN_DATA_DAYS}+ for a supply signal. Confidence grows as "
-            f"data accrues."
-        ]
+        if result.data_days == 0:
+            result.method = "insufficient"
+            result.direction = "neutral"
+            result.confidence = 0.0
+            result.drivers = [
+                "No AIS supply history yet — run ingest then trigger daily aggregation."
+            ]
+            _append_ffa_driver(result, ffa)
+            return result
+
+        # 1–13 days: snapshot ratio heuristic, very low confidence.
+        snap_score, snap_drivers = _snapshot_signal(supply_df)
+        result.method = "snapshot"
+        result.score = snap_score
+        result.direction = _direction_from_score(snap_score)
+        result.confidence = min(0.25, 0.05 + result.data_days / 80.0)
+        result.drivers = snap_drivers
         _append_ffa_driver(result, ffa)
         return result
 

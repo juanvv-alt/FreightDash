@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 from collections import defaultdict
 from datetime import timedelta
@@ -13,7 +14,7 @@ from django.utils import timezone
 from voyage.models import DailyIndexValue
 
 from .aggregation import week_over_week
-from .analytics import CLASS_INDEX_MAP, generate_signal
+from .analytics import CLASS_INDEX_MAP, CLASS_MARKET_INDEX_MAP, generate_signal
 from .models import (SNAPSHOT_CLASSES, DailySupplySnapshot, Port, PortCallEvent,
                      SupplySignal, TrackedVessel, VesselState)
 
@@ -89,6 +90,7 @@ def supply_forecast(request):
                 "vessel_class": vessel_class,
                 "label": CLASS_LABELS[vessel_class],
                 "index_name": CLASS_INDEX_MAP.get(vessel_class),
+                "market_index_name": CLASS_MARKET_INDEX_MAP.get(vessel_class),
                 "signal": signal,
                 "confidence_pct": round(signal["confidence"] * 100),
                 "snapshot": latest_snapshot,
@@ -182,6 +184,77 @@ def supply_chart_data(request, vessel_class):
             "index": index_points,
         }
     )
+
+
+def vessel_fleet(request):
+    """Summary of all AIS-tracked vessels: positions, class, condition."""
+    cutoff_48h = timezone.now() - timedelta(hours=48)
+
+    states = list(
+        VesselState.objects.select_related("vessel", "current_port")
+        .filter(vessel__is_excluded=False)
+        .order_by("vessel__vessel_class", "vessel__name", "vessel__mmsi")
+    )
+
+    by_class = defaultdict(int)
+    by_condition = defaultdict(int)
+    at_sea = 0
+    in_port_count = 0
+
+    for s in states:
+        by_class[s.vessel.vessel_class] += 1
+        by_condition[s.loading_condition] += 1
+        if s.current_port_id:
+            in_port_count += 1
+        else:
+            at_sea += 1
+
+    recent_events = list(
+        PortCallEvent.objects.select_related("vessel", "port")
+        .filter(timestamp__gte=timezone.now() - timedelta(hours=24))
+        .order_by("-timestamp")[:20]
+    )
+
+    ports = list(Port.objects.filter(is_active=True, basin="pacific").values(
+        "id", "name", "latitude", "longitude", "port_type", "radius_nm"
+    ))
+
+    vessel_geo = []
+    for s in states:
+        if s.latitude is not None and s.longitude is not None:
+            vessel_geo.append({
+                "mmsi": s.vessel.mmsi,
+                "name": s.vessel.name or f"MMSI {s.vessel.mmsi}",
+                "cls": s.vessel.vessel_class,
+                "cond": s.loading_condition,
+                "lat": round(s.latitude, 4),
+                "lon": round(s.longitude, 4),
+                "spd": round(s.speed_knots, 1) if s.speed_knots else None,
+                "port": s.current_port.name if s.current_port else None,
+                "len": round(s.vessel.length_m) if s.vessel.length_m else None,
+            })
+
+    class_breakdown = [
+        {"cls": cls, "label": lbl, "count": by_class.get(cls, 0)}
+        for cls, lbl in [("capesize", "Capesize"), ("panamax", "Panamax"),
+                         ("supramax", "Supramax"), ("handysize", "Handysize")]
+    ]
+
+    context = {
+        "states": states,
+        "total": len(states),
+        "class_breakdown": class_breakdown,
+        "by_condition": dict(by_condition),
+        "at_sea": at_sea,
+        "in_port_count": in_port_count,
+        "recent_events": recent_events,
+        "vessel_geo_json": json.dumps(vessel_geo),
+        "ports_json": json.dumps(ports),
+        "fresh_count": TrackedVessel.objects.filter(
+            last_seen__gte=cutoff_48h, is_excluded=False
+        ).count(),
+    }
+    return render(request, "supply/vessel_fleet.html", context)
 
 
 def trigger_ingest(request):
