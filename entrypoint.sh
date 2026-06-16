@@ -23,6 +23,9 @@ done
 echo "[entrypoint] Running migrations"
 python manage.py migrate --noinput
 
+echo "[entrypoint] Seeding Pacific port geofences"
+python manage.py seed_pacific_ports || true
+
 if [ "${RUN_SAMPLE_SEED:-false}" = "true" ]; then
     echo "[entrypoint] Seeding sample routes"
     python manage.py create_sample_routes || true
