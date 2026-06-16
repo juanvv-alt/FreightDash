@@ -1,0 +1,64 @@
+<h2>What should OB Forecast output?</h2>
+<p class="subtitle">You'll upload Oceanbolt tonnage CSVs per zone. What does the dashboard show you?</p>
+
+<style>
+.mockup-mini {
+  background: #1e2a3a;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 11px;
+  color: #cde;
+  margin-top: 8px;
+}
+.signal-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-weight:700; font-size:11px; }
+.bullish { background:#1a4a2a; color:#4caf50; }
+.bearish { background:#4a1a1a; color:#f44336; }
+.neutral { background:#2a2a1a; color:#ffc107; }
+.mini-chart { height:40px; background:linear-gradient(90deg,#2196f3 0%,#4caf50 40%,#f44336 70%,#ff9800 100%); border-radius:3px; opacity:0.7; margin-top:6px; }
+.trend-up { color:#4caf50; font-size:16px; }
+.trend-dn { color:#f44336; font-size:16px; }
+.zone-row { display:flex; justify-content:space-between; border-bottom:1px solid #2a3a4a; padding:4px 0; }
+</style>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Mirror the existing Supply Forecast — directional signal per zone</h3>
+      <p>Each of the 4 zones gets a <span class="signal-badge bullish">BULLISH</span> / <span class="signal-badge bearish">BEARISH</span> / <span class="signal-badge neutral">NEUTRAL</span> card with score + confidence, using the same z-score/regression logic as the AIS module. Consistent look & feel across the platform.</p>
+      <div class="mockup-mini">
+        <div class="zone-row"><span>NE Asia</span> <span class="signal-badge bullish">BULLISH 1.8</span></div>
+        <div class="zone-row"><span>SE Asia</span> <span class="signal-badge bearish">BEARISH -0.9</span></div>
+        <div class="zone-row"><span>Australia</span> <span class="signal-badge neutral">NEUTRAL 0.1</span></div>
+        <div class="zone-row"><span>East Pacific</span> <span class="signal-badge bullish">BULLISH 1.2</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Tonnage trend charts — visual evolution, no signal</h3>
+      <p>Charts showing the time series of each zone's tonnage count (vessel count + DWT), with week-over-week change highlighted. You read the trends yourself — no algorithmic signal.</p>
+      <div class="mockup-mini">
+        <div>NE Asia — Ballast at Sea <span class="trend-up">▲ +12 vessels WoW</span></div>
+        <div class="mini-chart"></div>
+        <div style="margin-top:6px">SE Asia — In Port <span class="trend-dn">▼ -8 vessels WoW</span></div>
+        <div class="mini-chart" style="background:linear-gradient(90deg,#f44 0%,#f96 60%,#ffc 100%)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both — signal cards + trend charts underneath</h3>
+      <p>Signal cards at the top (same as AIS Supply Forecast) plus expandable Chart.js time-series charts per zone below, showing all uploaded series (ballast/laden/in-port). Most information, most complex.</p>
+      <div class="mockup-mini">
+        <div class="zone-row"><span>NE Asia</span> <span class="signal-badge bullish">BULLISH 1.8</span></div>
+        <div class="mini-chart"></div>
+        <div style="font-size:10px; color:#89a; margin-top:4px">↑ expand to see ballast / laden / in-port series</div>
+      </div>
+    </div>
+  </div>
+</div>

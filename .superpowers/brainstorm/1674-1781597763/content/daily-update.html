@@ -1,0 +1,65 @@
+<h2>How do you want to enter daily data?</h2>
+<p class="subtitle">Historical data comes from bulk CSV upload. For daily updates, which workflow fits better?</p>
+
+<style>
+.mockup-mini { background:#1e2a3a; border-radius:6px; padding:10px 12px; font-size:12px; color:#cde; margin-top:8px; }
+.form-row { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #2a3a4a; padding:5px 0; }
+.mock-input-sm { background:#2a3a4a; border:1px solid #3a5a7a; border-radius:4px; padding:3px 8px; color:#adf; width:80px; text-align:right; font-size:12px; }
+.zone-tag { display:inline-block; padding:2px 8px; border-radius:10px; background:#1a3a5a; color:#7ad; font-size:11px; font-weight:600; }
+.mini-btn { background:#1565c0; color:#fff; border:none; border-radius:4px; padding:4px 12px; font-size:11px; cursor:pointer; margin-top:8px; }
+</style>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Quick entry form — type today's numbers directly</h3>
+      <p>A compact form on the OB Forecast page. You open Oceanbolt, read the zone counts off the map, type them in. One submit = all 4 zones updated for today.</p>
+      <div class="mockup-mini">
+        <div style="font-size:10px;color:#89a;margin-bottom:6px">📅 Today: 2026-06-16 — Enter today's Panamax counts</div>
+        <div class="form-row"><span><span class="zone-tag">NE Asia</span> Ballast at Sea</span> <input class="mock-input-sm" value="52" readonly></div>
+        <div class="form-row"><span><span class="zone-tag">SE Asia</span> Ballast at Sea</span> <input class="mock-input-sm" value="170" readonly></div>
+        <div class="form-row"><span><span class="zone-tag">Australia</span> Ballast at Sea</span> <input class="mock-input-sm" value="17" readonly></div>
+        <div class="form-row"><span><span class="zone-tag">E Pacific</span> Ballast at Sea</span> <input class="mock-input-sm" value="11" readonly></div>
+        <button class="mini-btn">Save today's data</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>CSV upload — download single day from Oceanbolt, upload here</h3>
+      <p>Each day you download a fresh CSV from Oceanbolt (just today's row) and upload it. Same flow as bulk historical upload, just one row. More clicks, but no manual typing.</p>
+      <div class="mockup-mini">
+        <div style="font-size:10px;color:#89a;margin-bottom:6px">📎 Upload today's Oceanbolt export</div>
+        <div style="border:2px dashed #3a5a7a; border-radius:6px; padding:12px; text-align:center; color:#7ad;">
+          Drop CSV here or click to browse<br>
+          <span style="font-size:10px;color:#567">System reads the latest date row and appends to history</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both — form for quick entry, CSV upload for bulk catch-up</h3>
+      <p>Quick entry form for day-to-day use. CSV upload available for bulk historical loads or when you missed a few days and want to catch up from a downloaded range.</p>
+      <div class="mockup-mini">
+        <div style="display:flex;gap:8px;font-size:10px;">
+          <div style="flex:1;border:1px solid #3a5a7a;border-radius:4px;padding:6px;">
+            <div style="color:#89a;margin-bottom:4px">⌨️ Quick entry</div>
+            <div>NE Asia: <input class="mock-input-sm" value="52" readonly style="width:50px"></div>
+          </div>
+          <div style="flex:1;border:1px solid #3a5a7a;border-radius:4px;padding:6px;">
+            <div style="color:#89a;margin-bottom:4px">📎 CSV upload</div>
+            <div style="border:1px dashed #3a5a7a;border-radius:4px;padding:4px;text-align:center;color:#7ad;font-size:10px">Drop file</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,87 @@
+<h2>Which 4 Pacific zones do you want to track?</h2>
+<p class="subtitle">Based on the Oceanbolt zone map — select up to 4 named zones (you can combine Oceanbolt sub-zones into one). Click any option to select it.</p>
+
+<style>
+.zone-map {
+  background: #d4e8f5;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px 0;
+  position: relative;
+  overflow: hidden;
+}
+.zone-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 3px;
+  font-size: 11px;
+}
+.zone-cell {
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(100,150,200,0.6);
+  border-radius: 4px;
+  padding: 8px 6px;
+  text-align: center;
+  color: #1a3a5c;
+  font-weight: 500;
+}
+.zone-cell.pacific { background: rgba(173,216,230,0.7); }
+.zone-cell.land { background: rgba(180,180,160,0.5); font-size: 10px; color: #555; }
+.zone-label { font-size: 9px; color: #557; margin-top: 2px; }
+</style>
+
+<div class="zone-map">
+  <div style="text-align:center; font-size:10px; color:#336; margin-bottom:8px; font-weight:600;">APPROXIMATE OCEANBOLT ZONE MAP — PACIFIC FOCUS</div>
+  <div class="zone-grid">
+    <!-- Row 1: Northern zones -->
+    <div class="zone-cell land">🌍 Atlantic / Americas W Coast</div>
+    <div class="zone-cell pacific">🌊 <strong>North Pacific East</strong><div class="zone-label">US/Canada West Coast<br>~23 vessels</div></div>
+    <div class="zone-cell pacific">🌊 <strong>North Pacific West</strong><div class="zone-label">Japan / Korea / China<br>~52-64 vessels</div></div>
+    <div class="zone-cell land">🌏 Asia / Indian Ocean</div>
+
+    <!-- Row 2: Tropical zones -->
+    <div class="zone-cell land">🌎 Central America / Caribbean</div>
+    <div class="zone-cell pacific">🌊 <strong>Tropical Pacific East</strong><div class="zone-label">Mexico / Ecuador coast<br>~10-11 vessels</div></div>
+    <div class="zone-cell pacific">🌊 <strong>SE Asia / Indonesia</strong><div class="zone-label">Philippines / Borneo<br>~170-221 vessels</div></div>
+    <div class="zone-cell land">🌏 Indian Ocean</div>
+
+    <!-- Row 3: Southern zones -->
+    <div class="zone-cell land">🌎 South Atlantic</div>
+    <div class="zone-cell pacific">🌊 <strong>South Pacific East</strong><div class="zone-label">Peru / Chile coast<br>~4 vessels</div></div>
+    <div class="zone-cell pacific">🌊 <strong>Australia / Oceania</strong><div class="zone-label">Eastern Australia<br>~17 vessels</div></div>
+    <div class="zone-cell land">🌏 Indian Ocean South</div>
+  </div>
+</div>
+
+<p style="font-size:13px; color:#446; margin: 12px 0 8px;">The <strong>6 blue Pacific zones</strong> above are roughly what Oceanbolt offers. You said you want <strong>max 4 zones</strong> and can combine. Which grouping makes most sense for Panamax supply forecasting?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>NE Asia · SE Asia · Australia · East Pacific</h3>
+      <p><strong>NE Asia</strong> = North Pacific West (Japan/Korea/China)<br>
+         <strong>SE Asia</strong> = SE Asia/Indonesia (combine w/ Tropical Pacific West)<br>
+         <strong>Australia</strong> = Australia/Oceania<br>
+         <strong>East Pacific</strong> = North + South Pacific East (Americas coast combined)</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>North Pacific · SE Asia / Australia · East Pacific · Open</h3>
+      <p><strong>North Pacific</strong> = Japan/Korea/China + US West Coast combined<br>
+         <strong>SE Asia / Aus</strong> = Indonesia/Philippines + Australia<br>
+         <strong>East Pacific</strong> = Americas coast (N + S combined)<br>
+         <strong>4th zone</strong> = Your choice (e.g. Indian Ocean as feeder zone)</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Custom — I'll define my own 4 zone names</h3>
+      <p>You tell me the 4 zone names and which Oceanbolt sub-zones each covers. I'll design the upload flow so you label each CSV upload with one of your 4 zone names.</p>
+    </div>
+  </div>
+</div>
