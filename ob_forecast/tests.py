@@ -1,14 +1,13 @@
-import io
 from datetime import date, timedelta
 
 from django.test import TestCase
-from django.utils import timezone
 
 from voyage.models import AvailableIndex, DailyIndexValue
 
 from .analytics import (
     OBSignalResult,
     generate_ob_signal,
+    load_panamax_index,
     load_zone_frame,
     persist_ob_signal,
 )
@@ -119,13 +118,10 @@ class OBLoadPanamaxIndexTestCase(TestCase):
         )
 
     def test_empty_returns_empty_series(self):
-        from .analytics import load_panamax_index
         s = load_panamax_index()
         self.assertTrue(s.empty)
 
     def test_returns_date_indexed_series(self):
-        from .analytics import load_panamax_index
-        from voyage.models import DailyIndexValue
         today = date.today()
         DailyIndexValue.objects.create(index=self.index, date=today, value=9250)
         s = load_panamax_index()
@@ -133,9 +129,6 @@ class OBLoadPanamaxIndexTestCase(TestCase):
         self.assertAlmostEqual(float(s.iloc[0]), 9250.0)
 
     def test_as_of_filters_future_dates(self):
-        from .analytics import load_panamax_index
-        from datetime import timedelta
-        from voyage.models import DailyIndexValue
         today = date.today()
         DailyIndexValue.objects.create(index=self.index, date=today, value=9250)
         DailyIndexValue.objects.create(index=self.index, date=today + timedelta(days=1), value=9300)

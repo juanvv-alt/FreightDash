@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from .models import OBForecastSignal, OBTonnageSnapshot
+from voyage.models import DailyIndexValue
 
 INDEX_NAME = "P3A_82"
 
@@ -51,8 +52,6 @@ def load_zone_frame(zone, as_of=None):
 
 def load_panamax_index(as_of=None):
     """P3A_82 daily closes → date-indexed Series."""
-    from voyage.models import DailyIndexValue
-
     qs = DailyIndexValue.objects.filter(index__name=INDEX_NAME)
     if as_of is not None:
         qs = qs.filter(date__lte=as_of)
@@ -92,7 +91,12 @@ def _snapshot_signal(df):
     if not series_list:
         return 0.0, ["No series data available."]
     latest = df.iloc[-1]
-    total = max(1.0, sum(float(latest.get(s, 0) or 0) for s in series_list))
+    # Normalize by fleet total so each series is a fraction of total fleet.
+    # If TOTAL series is available, use it as the normalizer directly since
+    # BALLAST_AT_SEA and IN_PORT are sub-components — summing them with TOTAL
+    # would double-count and compress all scores.
+    fleet_size = float(latest.get("TOTAL", 0) or 0) if "TOTAL" in series_list else 0.0
+    total = max(1.0, fleet_size or sum(float(latest.get(s, 0) or 0) for s in series_list))
     score = 0.0
     drivers = []
     for s in series_list:
@@ -112,8 +116,7 @@ def _zscore_signal(df):
     contributions = []
     drivers = []
     for s in _available_series(df):
-        col = df[s].dropna()
-        if col.empty:
+        if df[s].dropna().empty:
             continue
         z = _rolling_zscore(df[s])
         if z.dropna().empty:
@@ -139,9 +142,10 @@ def _fit_regression(df, index_series):
         return None
     i_chg = _weekly_changes(index_series)
     metric_changes = {s: _weekly_changes(df[s]) for s in series_list}
-    frame = pd.DataFrame(metric_changes)
+    raw_metrics = pd.DataFrame(metric_changes)
+    latest_x = raw_metrics.iloc[-1:].copy()   # capture before target column is joined
+    frame = raw_metrics.copy()
     frame["__y"] = i_chg.shift(-1)
-    latest_x = frame[series_list].iloc[-1:].copy()
     frame = frame.dropna()
     if len(frame) < MIN_REGRESSION_WEEKS:
         return None
