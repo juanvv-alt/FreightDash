@@ -20,7 +20,7 @@ class OBTonnageSnapshot(models.Model):
     date = models.DateField(db_index=True)
     zone = models.CharField(max_length=20, choices=ZONE_CHOICES)
     series = models.CharField(max_length=20, choices=SERIES_CHOICES)
-    vessel_count = models.IntegerField()
+    vessel_count = models.PositiveIntegerField(default=0)
     vessel_dwt = models.BigIntegerField(default=0)
 
     class Meta:
@@ -67,11 +67,11 @@ class OBUploadLog(models.Model):
     """Audit trail for CSV uploads."""
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    zone = models.CharField(max_length=20)
-    series = models.CharField(max_length=20)
+    zone = models.CharField(max_length=20, choices=ZONE_CHOICES)
+    series = models.CharField(max_length=20, choices=SERIES_CHOICES)
     filename = models.CharField(max_length=255)
-    rows_added = models.IntegerField(default=0)
-    rows_skipped = models.IntegerField(default=0)
+    rows_added = models.PositiveIntegerField(default=0)
+    rows_skipped = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["-uploaded_at"]
