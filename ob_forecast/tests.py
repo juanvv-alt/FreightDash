@@ -98,3 +98,47 @@ class OBSignalAnalyticsTestCase(TestCase):
         # Second call should upsert, not duplicate.
         persist_ob_signal(result, today)
         self.assertEqual(OBForecastSignal.objects.count(), 1)
+
+    def test_56_days_produces_regression_or_zscore(self):
+        self._seed_zone("NE_ASIA", days=60)
+        result = generate_ob_signal("NE_ASIA")
+        # With 60 days of data, regression may or may not fire depending on
+        # weekly resampling boundary; both are valid — assert it's one of them
+        self.assertIn(result.method, ("regression", "zscore"))
+        # In regression case, blended score is 0.6*reg + 0.4*z
+        if result.method == "regression":
+            self.assertLessEqual(result.confidence, 0.90)
+            self.assertTrue(len(result.drivers) >= 1)
+
+
+class OBLoadPanamaxIndexTestCase(TestCase):
+    def setUp(self):
+        self.index, _ = AvailableIndex.objects.get_or_create(
+            name="P3A_82",
+            defaults={"vessel_size": "panamax"},
+        )
+
+    def test_empty_returns_empty_series(self):
+        from .analytics import load_panamax_index
+        s = load_panamax_index()
+        self.assertTrue(s.empty)
+
+    def test_returns_date_indexed_series(self):
+        from .analytics import load_panamax_index
+        from voyage.models import DailyIndexValue
+        today = date.today()
+        DailyIndexValue.objects.create(index=self.index, date=today, value=9250)
+        s = load_panamax_index()
+        self.assertEqual(len(s), 1)
+        self.assertAlmostEqual(float(s.iloc[0]), 9250.0)
+
+    def test_as_of_filters_future_dates(self):
+        from .analytics import load_panamax_index
+        from datetime import timedelta
+        from voyage.models import DailyIndexValue
+        today = date.today()
+        DailyIndexValue.objects.create(index=self.index, date=today, value=9250)
+        DailyIndexValue.objects.create(index=self.index, date=today + timedelta(days=1), value=9300)
+        s = load_panamax_index(as_of=today)
+        self.assertEqual(len(s), 1)
+        self.assertAlmostEqual(float(s.iloc[0]), 9250.0)
