@@ -135,3 +135,85 @@ class OBLoadPanamaxIndexTestCase(TestCase):
         s = load_panamax_index(as_of=today)
         self.assertEqual(len(s), 1)
         self.assertAlmostEqual(float(s.iloc[0]), 9250.0)
+
+
+class OBForecastViewTestCase(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_superuser("admin", "a@b.com", "pw")
+        self.client.force_login(self.user)
+
+    def test_page_renders(self):
+        resp = self.client.get("/ob-forecast/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "OB Forecast")
+
+    def test_chart_data_endpoint_empty(self):
+        resp = self.client.get("/ob-forecast/chart-data/NE_ASIA/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("labels", data)
+        self.assertIn("series", data)
+        self.assertEqual(data["labels"], [])
+
+    def test_chart_data_unknown_zone(self):
+        resp = self.client.get("/ob-forecast/chart-data/FAKE_ZONE/")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_chart_data_returns_series(self):
+        today = date.today()
+        OBTonnageSnapshot.objects.create(date=today, zone="NE_ASIA", series="BALLAST_AT_SEA", vessel_count=52)
+        OBTonnageSnapshot.objects.create(date=today, zone="NE_ASIA", series="IN_PORT", vessel_count=27)
+        resp = self.client.get("/ob-forecast/chart-data/NE_ASIA/")
+        data = resp.json()
+        self.assertIn(today.isoformat(), data["labels"])
+        self.assertEqual(data["series"]["BALLAST_AT_SEA"][0], 52)
+
+    def test_csv_upload_parses_oceanbolt_format(self):
+        import io as _io
+        csv_content = (
+            "Date,Vessel Count,Vessel DWT\r\n"
+            "2026-01-01T00:00:00Z,52,3200000\r\n"
+            "2026-01-02T00:00:00Z,50,3100000\r\n"
+        )
+        f = _io.BytesIO(csv_content.encode("utf-8"))
+        f.name = "test.csv"
+        resp = self.client.post(
+            "/ob-forecast/upload/",
+            {"zone": "NE_ASIA", "series": "BALLAST_AT_SEA", "csv_file": f},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(OBTonnageSnapshot.objects.filter(zone="NE_ASIA").count(), 2)
+        snap = OBTonnageSnapshot.objects.get(zone="NE_ASIA", date=date(2026, 1, 1))
+        self.assertEqual(snap.vessel_count, 52)
+
+    def test_daily_entry_saves_values(self):
+        today = date.today()
+        resp = self.client.post(
+            "/ob-forecast/daily-entry/",
+            {
+                "entry_date": today.isoformat(),
+                "NE_ASIA_BALLAST_AT_SEA": "52",
+                "NE_ASIA_IN_PORT": "27",
+                "NE_ASIA_TOTAL": "64",
+                "SE_ASIA_BALLAST_AT_SEA": "170",
+                "SE_ASIA_IN_PORT": "51",
+                "SE_ASIA_TOTAL": "221",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            OBTonnageSnapshot.objects.filter(date=today, zone="NE_ASIA").count(), 3
+        )
+        snap = OBTonnageSnapshot.objects.get(date=today, zone="NE_ASIA", series="BALLAST_AT_SEA")
+        self.assertEqual(snap.vessel_count, 52)
+
+    def test_aggregate_creates_signals(self):
+        today = date.today()
+        for i in range(5):
+            d = today - timedelta(days=i)
+            OBTonnageSnapshot.objects.create(date=d, zone="NE_ASIA", series="TOTAL", vessel_count=60)
+        resp = self.client.post("/ob-forecast/aggregate/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(OBForecastSignal.objects.filter(date=today, zone="NE_ASIA").exists())
