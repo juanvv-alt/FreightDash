@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}OB Forecast - FreightDash{% endblock %}
+
+{% block extra_css %}
+<style>
+    .signal-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); height: 100%; }
+    .signal-card .card-header { border-radius: 12px 12px 0 0; font-weight: 600; }
+    .badge-bullish { background-color: var(--success-color); }
+    .badge-bearish { background-color: var(--danger-color); }
+    .badge-neutral { background-color: var(--warning-color); color: #212529; }
+    .driver-list { font-size: 0.85rem; padding-left: 1.1rem; margin-bottom: 0; }
+    .driver-list li { margin-bottom: 0.35rem; }
+    .confidence-bar { height: 6px; border-radius: 3px; background: #e9ecef; overflow: hidden; }
+    .confidence-fill { height: 100%; background: var(--primary-color); }
+    .zone-tab { cursor: pointer; }
+    .chart-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .data-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ------------------------------------------------------------------ #}
+{# Section 1 — Header + Signal Cards                                   #}
+{# ------------------------------------------------------------------ #}
+<div class="d-flex justify-content-between align-items-center mb-1">
+    <div>
+        <h2 class="mb-0"><i class="fas fa-water me-2"></i>OB Forecast</h2>
+        <p class="text-muted mb-0" style="font-size:0.9rem;">Panamax &middot; Pacific Zones</p>
+    </div>
+    <form method="post" action="{% url 'ob_forecast:ob_aggregate' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-sync-alt me-1"></i>Run Forecast
+        </button>
+    </form>
+</div>
+
+<div class="row g-3 mb-4 mt-1">
+    {% for card in cards %}
+    <div class="col-md-6 col-xl-3">
+        <div class="card signal-card">
+            <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                <span>{{ card.label }}</span>
+                <span class="badge badge-{{ card.signal.direction }} text-uppercase">{{ card.signal.direction }}</span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-1">
+                    <small class="text-muted">Score</small>
+                    <strong>{{ card.signal.score|floatformat:2 }}</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-1">
+                    <small class="text-muted">Confidence</small>
+                    <strong>{{ card.confidence_pct }}%</strong>
+                </div>
+                <div class="confidence-bar mb-2">
+                    <div class="confidence-fill" style="width: {{ card.confidence_pct }}%"></div>
+                </div>
+                <div class="text-muted mb-2" style="font-size:0.75rem;">
+                    Method: {{ card.signal.method }} &middot; {{ card.signal.data_days }}d data &middot; P3A_82
+                </div>
+                <hr class="my-2">
+                <ul class="driver-list">
+                    {% for driver in card.signal.drivers %}
+                    <li>{{ driver }}</li>
+                    {% empty %}
+                    <li class="text-muted">No notable drivers.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Section 2 — Chart                                                   #}
+{# ------------------------------------------------------------------ #}
+<div class="card chart-card mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">OB Tonnage vs P3A_82</h5>
+            <ul class="nav nav-pills" id="zoneTabs">
+                {% for zone_key, zone_label in zones %}
+                <li class="nav-item">
+                    <a class="nav-link zone-tab {% if forloop.first %}active{% endif %}"
+                       data-zone="{{ zone_key }}">{{ zone_label }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <canvas id="obChart" height="100"></canvas>
+    </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Section 3 — Data Entry                                              #}
+{# ------------------------------------------------------------------ #}
+<div class="row g-4 mb-4">
+
+    {# Left column — Quick Daily Entry #}
+    <div class="col-lg-7">
+        <div class="card data-card h-100">
+            <div class="card-body">
+                <h5 class="mb-3"><i class="fas fa-keyboard me-2"></i>Quick Daily Entry</h5>
+                <form method="post" action="{% url 'ob_forecast:ob_daily_entry' %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="entry_date" class="form-label fw-semibold">Date</label>
+                        <input type="date" class="form-control" id="entry_date" name="entry_date"
+                               value="{{ today|date:'Y-m-d' }}" required>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-3">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Zone</th>
+                                    {% for series_key, series_label in series_choices %}
+                                    <th>{{ series_label }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for zone_key, zone_label in zones %}
+                                <tr>
+                                    <td class="fw-semibold text-nowrap">{{ zone_label }}</td>
+                                    {% for series_key, series_label in series_choices %}
+                                    <td>
+                                        <input type="number" class="form-control form-control-sm"
+                                               name="{{ zone_key }}_{{ series_key }}"
+                                               min="0" placeholder="—">
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-1"></i>Save Today's Data
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {# Right column — CSV Upload #}
+    <div class="col-lg-5">
+        <div class="card data-card h-100">
+            <div class="card-body">
+                <h5 class="mb-3"><i class="fas fa-file-csv me-2"></i>CSV Upload</h5>
+                <form method="post" action="{% url 'ob_forecast:ob_upload' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="upload_zone" class="form-label fw-semibold">Zone</label>
+                        <select class="form-select" id="upload_zone" name="zone" required>
+                            <option value="">— select zone —</option>
+                            {% for zone_key, zone_label in zones %}
+                            <option value="{{ zone_key }}">{{ zone_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="upload_series" class="form-label fw-semibold">Series</label>
+                        <select class="form-select" id="upload_series" name="series" required>
+                            <option value="">— select series —</option>
+                            {% for series_key, series_label in series_choices %}
+                            <option value="{{ series_key }}">{{ series_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="csv_file" class="form-label fw-semibold">CSV File</label>
+                        <input type="file" class="form-control" id="csv_file" name="csv_file"
+                               accept=".csv" required>
+                        <div class="form-text">Expects columns: Date, Vessel Count, Vessel DWT</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i>Upload
+                    </button>
+                </form>
+
+                {% if upload_log %}
+                <hr class="mt-4">
+                <h6 class="mb-2">Recent Uploads</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:0.82rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>When</th>
+                                <th>Zone</th>
+                                <th>Series</th>
+                                <th>Added</th>
+                                <th>Skipped</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in upload_log %}
+                            <tr>
+                                <td class="text-nowrap">{{ log.uploaded_at|date:"Y-m-d H:i" }}</td>
+                                <td>{{ log.zone_label }}</td>
+                                <td>{{ log.series_label }}</td>
+                                <td class="text-success fw-semibold">{{ log.rows_added }}</td>
+                                <td class="text-muted">{{ log.rows_skipped }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const ctx = document.getElementById('obChart').getContext('2d');
+    let chart = null;
+
+    function render(data) {
+        const labels = data.labels || [];
+
+        const datasets = [
+            {
+                label: 'Ballast at Sea',
+                data: (data.series['BALLAST_AT_SEA'] || []).map(function (y, i) {
+                    return { x: labels[i], y: y };
+                }),
+                borderColor: '#dc3545',
+                backgroundColor: '#dc3545',
+                yAxisID: 'yLeft',
+                tension: 0.2,
+                pointRadius: 0,
+            },
+            {
+                label: 'In Port',
+                data: (data.series['IN_PORT'] || []).map(function (y, i) {
+                    return { x: labels[i], y: y };
+                }),
+                borderColor: '#fd7e14',
+                backgroundColor: '#fd7e14',
+                yAxisID: 'yLeft',
+                tension: 0.2,
+                pointRadius: 0,
+            },
+            {
+                label: 'Total',
+                data: (data.series['TOTAL'] || []).map(function (y, i) {
+                    return { x: labels[i], y: y };
+                }),
+                borderColor: '#6f42c1',
+                backgroundColor: '#6f42c1',
+                yAxisID: 'yLeft',
+                tension: 0.2,
+                pointRadius: 0,
+            },
+        ];
+
+        if (data.index && data.index.length) {
+            datasets.push({
+                label: data.index_name || 'P3A_82',
+                data: data.index,
+                borderColor: '#0d6efd',
+                borderWidth: 2,
+                borderDash: [6, 3],
+                backgroundColor: 'transparent',
+                yAxisID: 'yRight',
+                tension: 0.2,
+                pointRadius: 0,
+            });
+        }
+
+        if (chart) { chart.destroy(); }
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: labels, datasets: datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { type: 'category' },
+                    yLeft: {
+                        type: 'linear',
+                        position: 'left',
+                        title: { display: true, text: 'Vessel count' },
+                    },
+                    yRight: {
+                        type: 'linear',
+                        position: 'right',
+                        title: { display: true, text: 'P3A_82 ($/day)' },
+                        grid: { drawOnChartArea: false },
+                    },
+                },
+            },
+        });
+    }
+
+    function load(zone) {
+        fetch('/ob-forecast/chart-data/' + zone + '/')
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function (e) { console.error('Chart load failed', e); });
+    }
+
+    document.querySelectorAll('.zone-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.zone-tab').forEach(function (t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            load(tab.getAttribute('data-zone'));
+        });
+    });
+
+    const first = document.querySelector('.zone-tab');
+    if (first) { load(first.getAttribute('data-zone')); }
+});
+</script>
+{% endblock %}
