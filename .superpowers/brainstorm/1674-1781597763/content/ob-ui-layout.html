@@ -1,0 +1,135 @@
+<h2>OB Forecast — Page Layout</h2>
+<p class="subtitle">Proposed layout for the OB Forecast dashboard. Click to select if this looks right.</p>
+
+<style>
+.mockup-page { background:#0f1923; border-radius:8px; padding:16px; font-size:11px; color:#cde; font-family:monospace; }
+.page-title { font-size:16px; font-weight:700; color:#e8f4ff; margin-bottom:4px; }
+.page-sub { font-size:11px; color:#567; margin-bottom:12px; }
+.section-label { font-size:9px; text-transform:uppercase; color:#456; letter-spacing:1px; margin:10px 0 4px; border-top:1px solid #1e2f3f; padding-top:8px; }
+.signal-row { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-bottom:8px; }
+.sig-card { background:#1a2a3a; border-radius:6px; padding:8px; border-left:3px solid #2196f3; }
+.sig-card.bull { border-color:#4caf50; }
+.sig-card.bear { border-color:#f44336; }
+.sig-card.neut { border-color:#ffc107; }
+.sig-badge { font-size:9px; font-weight:700; padding:2px 6px; border-radius:10px; }
+.sig-badge.bull { background:#1a3a1a; color:#4caf50; }
+.sig-badge.bear { background:#3a1a1a; color:#f44336; }
+.sig-badge.neut { background:#3a3a1a; color:#ffc107; }
+.sig-score { font-size:14px; font-weight:700; color:#e8f4ff; margin:4px 0 2px; }
+.sig-meta { font-size:9px; color:#456; }
+.sig-driver { font-size:9px; color:#89a; margin-top:3px; }
+.chart-area { background:#1a2a3a; border-radius:6px; padding:10px; margin-bottom:8px; }
+.chart-tabs { display:flex; gap:6px; margin-bottom:8px; }
+.chart-tab { padding:3px 10px; border-radius:10px; background:#1a2a3a; color:#567; font-size:10px; cursor:pointer; border:1px solid #2a3a4a; }
+.chart-tab.active { background:#1565c0; color:#fff; border-color:#1565c0; }
+.chart-mock { height:80px; background:linear-gradient(180deg,#1a2a3a 0%,#0f1923 100%); border-radius:4px; position:relative; overflow:hidden; }
+.chart-line { position:absolute; bottom:20px; left:0; right:0; height:2px; background:linear-gradient(90deg,#2196f3,#4caf50,#2196f3,#f44336,#ff9800); opacity:0.7; border-radius:2px; }
+.chart-line2 { position:absolute; bottom:35px; left:0; right:0; height:2px; background:linear-gradient(90deg,#f44336,#ff9800,#ffc107,#4caf50,#4caf50); opacity:0.5; border-radius:2px; }
+.chart-line3 { position:absolute; bottom:50px; left:0; right:0; height:2px; background:linear-gradient(90deg,#9c27b0,#673ab7,#9c27b0,#673ab7); opacity:0.4; border-radius:2px; }
+.chart-legend { display:flex; gap:10px; font-size:9px; margin-top:4px; }
+.legend-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; }
+.upload-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.upload-box { background:#1a2a3a; border-radius:6px; padding:10px; }
+.upload-title { font-size:10px; font-weight:600; color:#7ad; margin-bottom:6px; }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:10px; }
+.form-row-mini { display:flex; justify-content:space-between; align-items:center; padding:2px 0; border-bottom:1px solid #1e2f3f; }
+.mock-input-xs { background:#0f1923; border:1px solid #2a3a4a; border-radius:3px; padding:2px 5px; color:#adf; width:55px; text-align:right; font-size:10px; }
+.zone-tag-xs { display:inline-block; padding:1px 5px; border-radius:8px; background:#1a3a5a; color:#7ad; font-size:9px; font-weight:600; }
+.drop-zone { border:2px dashed #2a3a4a; border-radius:5px; padding:10px; text-align:center; color:#456; font-size:10px; margin-top:4px; }
+.run-btn { background:#1565c0; color:#fff; border:none; border-radius:4px; padding:4px 12px; font-size:10px; float:right; margin-top:6px; }
+.toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+</style>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>This layout looks right</h3>
+      <div class="mockup-page">
+        <div class="toolbar">
+          <div>
+            <div class="page-title">OB Forecast <span style="font-size:11px;color:#456;font-weight:400">Panamax · Pacific Zones</span></div>
+            <div class="page-sub">Oceanbolt tonnage supply forecast · Last updated: today</div>
+          </div>
+          <button class="run-btn">⚡ Run Forecast</button>
+        </div>
+
+        <div class="section-label">Signal — by zone</div>
+        <div class="signal-row">
+          <div class="sig-card bull">
+            <div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:#89a">NE Asia</span><span class="sig-badge bull">BULLISH</span></div>
+            <div class="sig-score">+1.8</div>
+            <div class="sig-meta">conf 0.61 · zscore · 42 days</div>
+            <div class="sig-driver">↓ Ballast at Sea –8% WoW</div>
+            <div class="sig-driver">↑ In Port +12% WoW</div>
+          </div>
+          <div class="sig-card bear">
+            <div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:#89a">SE Asia</span><span class="sig-badge bear">BEARISH</span></div>
+            <div class="sig-score">–0.9</div>
+            <div class="sig-meta">conf 0.38 · zscore · 42 days</div>
+            <div class="sig-driver">↑ Ballast at Sea +15% WoW</div>
+          </div>
+          <div class="sig-card neut">
+            <div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:#89a">Australia</span><span class="sig-badge neut">NEUTRAL</span></div>
+            <div class="sig-score">+0.1</div>
+            <div class="sig-meta">conf 0.29 · zscore · 42 days</div>
+            <div class="sig-driver">No clear direction</div>
+          </div>
+          <div class="sig-card bull">
+            <div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:#89a">East Pacific</span><span class="sig-badge bull">BULLISH</span></div>
+            <div class="sig-score">+1.2</div>
+            <div class="sig-meta">conf 0.44 · zscore · 42 days</div>
+            <div class="sig-driver">↓ Total –5% WoW</div>
+          </div>
+        </div>
+
+        <div class="section-label">Charts — tonnage history per zone</div>
+        <div class="chart-area">
+          <div class="chart-tabs">
+            <span class="chart-tab active">NE Asia</span>
+            <span class="chart-tab">SE Asia</span>
+            <span class="chart-tab">Australia</span>
+            <span class="chart-tab">East Pacific</span>
+          </div>
+          <div class="chart-mock">
+            <div class="chart-line"></div>
+            <div class="chart-line2"></div>
+            <div class="chart-line3"></div>
+          </div>
+          <div class="chart-legend">
+            <span><span class="legend-dot" style="background:#2196f3"></span>Ballast at Sea</span>
+            <span><span class="legend-dot" style="background:#f44336"></span>In Port</span>
+            <span><span class="legend-dot" style="background:#9c27b0"></span>Total</span>
+          </div>
+        </div>
+
+        <div class="section-label">Data entry</div>
+        <div class="upload-row">
+          <div class="upload-box">
+            <div class="upload-title">⌨️ Quick Entry — today's counts</div>
+            <div style="font-size:9px;color:#456;margin-bottom:5px">📅 2026-06-17</div>
+            <div class="form-row-mini"><span><span class="zone-tag-xs">NE Asia</span> Ballast</span> <input class="mock-input-xs" value="52" readonly></div>
+            <div class="form-row-mini"><span><span class="zone-tag-xs">NE Asia</span> In Port</span> <input class="mock-input-xs" value="27" readonly></div>
+            <div class="form-row-mini"><span><span class="zone-tag-xs">NE Asia</span> Total</span> <input class="mock-input-xs" value="64" readonly></div>
+            <div style="color:#456;font-size:9px;padding:2px 0">· · · SE Asia, Australia, E Pacific · · ·</div>
+            <button class="run-btn" style="margin-top:4px">Save</button>
+          </div>
+          <div class="upload-box">
+            <div class="upload-title">📎 CSV Upload — bulk / catch-up</div>
+            <div style="font-size:9px;color:#456;margin-bottom:5px">Zone: <select style="background:#0f1923;border:1px solid #2a3a4a;color:#7ad;font-size:9px;border-radius:3px"><option>NE Asia</option></select> &nbsp; Series: <select style="background:#0f1923;border:1px solid #2a3a4a;color:#7ad;font-size:9px;border-radius:3px"><option>Ballast at Sea</option></select></div>
+            <div class="drop-zone">Drop CSV here or click to browse<br><span style="font-size:9px">Oceanbolt export: Date, Vessel Count, Vessel DWT</span></div>
+            <button class="run-btn" style="margin-top:4px">Upload</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Move data entry to a separate page</h3>
+      <p>Keep the main OB Forecast page clean — just signal cards + charts. Put quick entry form and CSV upload on a dedicated "Data Management" sub-page (e.g. <code>/ob-forecast/data/</code>). Less scrolling on the main view.</p>
+    </div>
+  </div>
+</div>
