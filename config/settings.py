@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'core',
     'voyage',
     'supply',
+    'ob_forecast',
 ]
 
 MIDDLEWARE = [
