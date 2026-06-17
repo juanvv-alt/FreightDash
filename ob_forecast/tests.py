@@ -156,6 +156,7 @@ class OBForecastViewTestCase(TestCase):
         self.assertIn("labels", data)
         self.assertIn("series", data)
         self.assertEqual(data["labels"], [])
+        self.assertEqual(data["index"], [])
 
     def test_chart_data_unknown_zone(self):
         resp = self.client.get("/ob-forecast/chart-data/FAKE_ZONE/")

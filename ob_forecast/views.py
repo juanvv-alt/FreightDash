@@ -3,9 +3,11 @@ import io
 from collections import defaultdict
 from datetime import date, timedelta
 
-from django.http import JsonResponse
+from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+
+from voyage.models import DailyIndexValue
 
 from .analytics import generate_ob_signal, persist_ob_signal
 from .models import (
@@ -105,8 +107,6 @@ def ob_chart_data(request, zone):
         "TOTAL": [by_date[d].get("TOTAL") for d in labels],
     }
 
-    from voyage.models import DailyIndexValue
-
     idx_qs = (
         DailyIndexValue.objects.filter(index__name="P3A_82", date__gte=start)
         .order_by("date")
@@ -138,6 +138,11 @@ def ob_upload(request):
     if not zone or not series or not uploaded_file:
         return redirect("ob_forecast:ob_forecast")
 
+    VALID_ZONES = {z[0] for z in ZONE_CHOICES}
+    VALID_SERIES = {s[0] for s in SERIES_CHOICES}
+    if zone not in VALID_ZONES or series not in VALID_SERIES:
+        return redirect("ob_forecast:ob_forecast")
+
     text = uploaded_file.read().decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
     rows_added = 0
@@ -153,16 +158,13 @@ def ob_upload(request):
             rows_skipped += 1
             continue
 
-        _, created = OBTonnageSnapshot.objects.update_or_create(
+        OBTonnageSnapshot.objects.update_or_create(
             date=parsed_date,
             zone=zone,
             series=series,
             defaults={"vessel_count": vessel_count, "vessel_dwt": vessel_dwt},
         )
-        if created:
-            rows_added += 1
-        else:
-            rows_skipped += 1
+        rows_added += 1
 
     OBUploadLog.objects.create(
         zone=zone,
@@ -206,7 +208,7 @@ def ob_daily_entry(request):
 
 def ob_aggregate(request):
     if request.method != "POST":
-        return redirect("ob_forecast:ob_forecast")
+        return HttpResponseNotAllowed(["POST"])
 
     today = timezone.localdate()
     for zone_key, _ in ZONE_CHOICES:
