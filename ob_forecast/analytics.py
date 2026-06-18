@@ -7,6 +7,7 @@ from .models import OBForecastSignal, OBTonnageSnapshot
 from voyage.models import DailyIndexValue
 
 INDEX_NAME = "P3A_82"
+SECONDARY_INDEX_NAME = "BPI TC Average"
 
 SERIES_METRIC_SIGN = {
     "BALLAST_AT_SEA": -1,
@@ -53,6 +54,18 @@ def load_zone_frame(zone, as_of=None):
 def load_panamax_index(as_of=None):
     """P3A_82 daily closes → date-indexed Series."""
     qs = DailyIndexValue.objects.filter(index__name=INDEX_NAME)
+    if as_of is not None:
+        qs = qs.filter(date__lte=as_of)
+    rows = list(qs.order_by("date").values_list("date", "value"))
+    if not rows:
+        return pd.Series(dtype=float)
+    idx = pd.to_datetime([r[0] for r in rows])
+    return pd.Series([r[1] for r in rows], index=idx).sort_index()
+
+
+def load_secondary_index(as_of=None):
+    """BPI TC Average daily closes → date-indexed Series. Returns empty if not in DB."""
+    qs = DailyIndexValue.objects.filter(index__name=SECONDARY_INDEX_NAME)
     if as_of is not None:
         qs = qs.filter(date__lte=as_of)
     rows = list(qs.order_by("date").values_list("date", "value"))

@@ -3,6 +3,7 @@ import io
 from collections import defaultdict
 from datetime import date, timedelta
 
+import pandas as pd
 from django.contrib import messages
 from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
@@ -10,7 +11,8 @@ from django.utils import timezone
 
 from voyage.models import DailyIndexValue
 
-from .analytics import generate_ob_signal, persist_ob_signal
+from .analytics import generate_ob_signal, load_panamax_index, load_secondary_index, persist_ob_signal
+from .analytics import SECONDARY_INDEX_NAME
 from .models import (
     SERIES_CHOICES,
     ZONE_CHOICES,
@@ -120,12 +122,23 @@ def ob_chart_data(request, zone):
         for d, v in idx_qs
     ]
 
+    sec_series = load_secondary_index()
+    sec_points = []
+    if not sec_series.empty:
+        sec_start = sec_series[sec_series.index >= pd.Timestamp(start)]
+        sec_points = [
+            {"x": d.date().isoformat(), "y": round(float(v), 2)}
+            for d, v in zip(sec_start.index, sec_start.values)
+        ]
+
     return JsonResponse(
         {
             "labels": labels,
             "series": series_out,
             "index_name": "P3A_82",
             "index": index_points,
+            "index2_name": SECONDARY_INDEX_NAME,
+            "index2": sec_points,
         }
     )
 
@@ -247,4 +260,121 @@ def ob_delete_series(request):
         "series": series,
         "series_label": SERIES_LABELS[series],
         "count": count,
+    })
+
+
+def ob_run_backtest(request, zone):
+    if request.method != "POST":
+        return redirect("ob_forecast:ob_backtest", zone=zone)
+    if zone not in VALID_ZONES:
+        return redirect("ob_forecast:ob_forecast")
+    dates = list(
+        OBTonnageSnapshot.objects.filter(zone=zone)
+        .values_list("date", flat=True)
+        .order_by("date")
+        .distinct()
+    )
+    for d in dates:
+        result = generate_ob_signal(zone, as_of=d)
+        persist_ob_signal(result, d)
+    messages.success(
+        request,
+        f"Backtest complete — {len(dates)} dates computed for {ZONE_LABELS[zone]}.",
+    )
+    return redirect("ob_forecast:ob_backtest", zone=zone)
+
+
+def ob_backtest_view(request, zone):
+    if zone not in VALID_ZONES:
+        return redirect("ob_forecast:ob_forecast")
+    today = timezone.localdate()
+    signals = list(OBForecastSignal.objects.filter(zone=zone).order_by("date"))
+    index_series = load_panamax_index()
+    rows = []
+    correct = 0
+    total_evaluated = 0
+    for sig in signals:
+        outcome_date = sig.date + timedelta(days=7)
+        actual_return = None
+        actual_dir = None
+        hit = None
+        try:
+            price_start = float(index_series.loc[pd.Timestamp(sig.date)])
+            price_end = float(index_series.loc[pd.Timestamp(outcome_date)])
+            actual_return = round((price_end - price_start) / price_start * 100, 2)
+            if actual_return > 1.5:
+                actual_dir = "bullish"
+            elif actual_return < -1.5:
+                actual_dir = "bearish"
+            else:
+                actual_dir = "neutral"
+            if actual_dir != "neutral":
+                hit = sig.direction == actual_dir
+                total_evaluated += 1
+                if hit:
+                    correct += 1
+        except KeyError:
+            pass
+        rows.append({
+            "date": sig.date,
+            "direction": sig.direction,
+            "score": sig.score,
+            "confidence": sig.confidence,
+            "method": sig.method,
+            "data_days": sig.data_days,
+            "actual_return": actual_return,
+            "actual_dir": actual_dir,
+            "was_correct": hit,
+        })
+    accuracy_pct = round(correct / total_evaluated * 100, 1) if total_evaluated else None
+    context = {
+        "zone": zone,
+        "zone_label": ZONE_LABELS[zone],
+        "zones": ZONE_CHOICES,
+        "rows": rows[-60:],
+        "total_signals": len(signals),
+        "total_evaluated": total_evaluated,
+        "accuracy_pct": accuracy_pct,
+        "today": today,
+    }
+    return render(request, "ob_forecast/backtest.html", context)
+
+
+def ob_backtest_data(request, zone):
+    if zone not in VALID_ZONES:
+        return JsonResponse({"error": "Unknown zone"}, status=404)
+    signals = list(OBForecastSignal.objects.filter(zone=zone).order_by("date"))
+    index_series = load_panamax_index()
+    labels, signal_scores, confidences, actual_returns, was_correct_list = [], [], [], [], []
+    for sig in signals:
+        outcome_date = sig.date + timedelta(days=7)
+        labels.append(sig.date.isoformat())
+        signal_scores.append(round(sig.score, 3))
+        confidences.append(round(sig.confidence, 3))
+        try:
+            p0 = float(index_series.loc[pd.Timestamp(sig.date)])
+            p1 = float(index_series.loc[pd.Timestamp(outcome_date)])
+            ret = round((p1 - p0) / p0 * 100, 2)
+            actual_returns.append(ret)
+            actual_dir = "bullish" if ret > 1.5 else ("bearish" if ret < -1.5 else "neutral")
+            hit = (sig.direction == actual_dir) if actual_dir != "neutral" else None
+            was_correct_list.append(hit)
+        except KeyError:
+            actual_returns.append(None)
+            was_correct_list.append(None)
+    index_points = [
+        {"x": d.date().isoformat(), "y": round(float(v), 2)}
+        for d, v in zip(index_series.index, index_series.values)
+    ]
+    correct = sum(1 for x in was_correct_list if x is True)
+    evaluated = sum(1 for x in was_correct_list if x is not None)
+    return JsonResponse({
+        "labels": labels,
+        "signal_score": signal_scores,
+        "confidence": confidences,
+        "actual_return_pct": actual_returns,
+        "was_correct": was_correct_list,
+        "index": index_points,
+        "accuracy_pct": round(correct / evaluated * 100, 1) if evaluated else None,
+        "total_signals": len(signals),
     })

@@ -253,44 +253,33 @@ document.addEventListener('DOMContentLoaded', function () {
     const ctx = document.getElementById('obChart').getContext('2d');
     let chart = null;
 
+    const OB_SERIES = [
+        { key: 'BALLAST_AT_SEA', label: 'Ballast at Sea', color: '#dc3545' },
+        { key: 'IN_PORT',        label: 'In Port',         color: '#fd7e14' },
+        { key: 'TOTAL',          label: 'Total',            color: '#6f42c1' },
+    ];
+
     function render(data) {
         const labels = data.labels || [];
 
-        const datasets = [
-            {
-                label: 'Ballast at Sea',
-                data: (data.series['BALLAST_AT_SEA'] || []).map(function (y, i) {
-                    return { x: labels[i], y: y };
-                }),
-                borderColor: '#dc3545',
-                backgroundColor: '#dc3545',
-                yAxisID: 'yLeft',
-                tension: 0.2,
-                pointRadius: 0,
-            },
-            {
-                label: 'In Port',
-                data: (data.series['IN_PORT'] || []).map(function (y, i) {
-                    return { x: labels[i], y: y };
-                }),
-                borderColor: '#fd7e14',
-                backgroundColor: '#fd7e14',
-                yAxisID: 'yLeft',
-                tension: 0.2,
-                pointRadius: 0,
-            },
-            {
-                label: 'Total',
-                data: (data.series['TOTAL'] || []).map(function (y, i) {
-                    return { x: labels[i], y: y };
-                }),
-                borderColor: '#6f42c1',
-                backgroundColor: '#6f42c1',
-                yAxisID: 'yLeft',
-                tension: 0.2,
-                pointRadius: 0,
-            },
-        ];
+        const datasets = OB_SERIES
+            .filter(function (s) {
+                return (data.series[s.key] || []).some(function (v) { return v !== null; });
+            })
+            .map(function (s) {
+                return {
+                    label: s.label,
+                    data: (data.series[s.key] || []).map(function (y, i) {
+                        return { x: data.labels[i], y: y };
+                    }),
+                    borderColor: s.color,
+                    backgroundColor: s.color,
+                    yAxisID: 'ySupply',
+                    tension: 0.2,
+                    pointRadius: 0,
+                    spanGaps: false,
+                };
+            });
 
         if (data.index && data.index.length) {
             datasets.push({
@@ -300,7 +289,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 borderWidth: 2,
                 borderDash: [6, 3],
                 backgroundColor: 'transparent',
-                yAxisID: 'yRight',
+                yAxisID: 'yIndex',
+                tension: 0.2,
+                pointRadius: 0,
+            });
+        }
+
+        if (data.index2 && data.index2.length) {
+            datasets.push({
+                label: data.index2_name || 'BPI TC Average',
+                data: data.index2,
+                borderColor: '#198754',
+                borderWidth: 2,
+                borderDash: [3, 3],
+                yAxisID: 'yIndex',
                 tension: 0.2,
                 pointRadius: 0,
             });
@@ -315,15 +317,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: { type: 'category' },
-                    yLeft: {
+                    ySupply: {
                         type: 'linear',
                         position: 'left',
                         title: { display: true, text: 'Vessel count' },
                     },
-                    yRight: {
+                    yIndex: {
                         type: 'linear',
                         position: 'right',
-                        title: { display: true, text: 'P3A_82 ($/day)' },
+                        title: { display: true, text: '$/day' },
                         grid: { drawOnChartArea: false },
                     },
                 },

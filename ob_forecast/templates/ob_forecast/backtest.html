@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Backtest — {{ zone_label }} — OB Forecast{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .badge-bullish { background-color: var(--success-color, #198754); }
+    .badge-bearish { background-color: var(--danger-color, #dc3545); }
+    .badge-neutral { background-color: var(--secondary-color, #6c757d); }
+    .hit-icon { font-size: 1rem; }
+    .hit-yes { color: #198754; }
+    .hit-no  { color: #dc3545; }
+    .hit-na  { color: #adb5bd; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if messages %}
+<div class="mb-3">
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-1">
+            <i class="fas fa-vial me-2"></i>Backtest
+            <small class="text-muted fs-6 fw-normal ms-2">{{ zone_label }} · Signal accuracy vs P3A_82</small>
+        </h2>
+        <a href="{% url 'ob_forecast:ob_forecast' %}" class="text-muted" style="font-size:0.85rem;">
+            <i class="fas fa-arrow-left me-1"></i>Back to OB Forecast
+        </a>
+    </div>
+    <form method="post" action="{% url 'ob_forecast:ob_run_backtest' zone=zone %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-warning">
+            <i class="fas fa-history me-1"></i>Run Historical Backtest
+        </button>
+    </form>
+</div>
+
+{# Zone tabs #}
+<ul class="nav nav-pills mb-4">
+    {% for zone_key, zone_label_iter in zones %}
+    <li class="nav-item">
+        <a class="nav-link {% if zone_key == zone %}active{% endif %}"
+           href="{% url 'ob_forecast:ob_backtest' zone=zone_key %}">{{ zone_label_iter }}</a>
+    </li>
+    {% endfor %}
+</ul>
+
+{# Stats row #}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card text-center p-3">
+            <div class="text-muted mb-1" style="font-size:0.8rem;">Signals Computed</div>
+            <div class="fs-2 fw-bold">{{ total_signals }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card text-center p-3">
+            <div class="text-muted mb-1" style="font-size:0.8rem;">Signals Evaluated</div>
+            <div class="fs-2 fw-bold">{{ total_evaluated }}</div>
+            <div class="text-muted" style="font-size:0.75rem;">had P3A_82 data +7d</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card text-center p-3 {% if accuracy_pct and accuracy_pct >= 55 %}border-success{% elif accuracy_pct and accuracy_pct < 45 %}border-danger{% endif %}">
+            <div class="text-muted mb-1" style="font-size:0.8rem;">Overall Accuracy</div>
+            <div class="fs-2 fw-bold {% if accuracy_pct and accuracy_pct >= 55 %}text-success{% elif accuracy_pct and accuracy_pct < 45 %}text-danger{% endif %}">
+                {% if accuracy_pct %}{{ accuracy_pct }}%{% else %}—{% endif %}
+            </div>
+            <div class="text-muted" style="font-size:0.75rem;">excl. neutral outcomes</div>
+        </div>
+    </div>
+</div>
+
+{# Chart #}
+<div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div class="card-body">
+        <h5 class="mb-3">Signal score vs P3A_82 actual weekly return</h5>
+        {% if total_signals > 0 %}
+        <canvas id="backtestChart" height="100"></canvas>
+        {% else %}
+        <p class="text-muted text-center py-4">No signals computed yet. Click "Run Historical Backtest" to generate them.</p>
+        {% endif %}
+    </div>
+</div>
+
+{# Table #}
+{% if rows %}
+<div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div class="card-body">
+        <h5 class="mb-3">Last {{ rows|length }} signals</h5>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Signal</th>
+                        <th>Score</th>
+                        <th>Conf.</th>
+                        <th>Method</th>
+                        <th>Days data</th>
+                        <th>P3A_82 +7d</th>
+                        <th>Outcome</th>
+                        <th>Hit?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows reversed %}
+                    <tr>
+                        <td>{{ row.date|date:"d M Y" }}</td>
+                        <td><span class="badge badge-{{ row.direction }} text-uppercase">{{ row.direction }}</span></td>
+                        <td>{{ row.score|floatformat:2 }}</td>
+                        <td>{{ row.confidence|floatformat:2 }}</td>
+                        <td><small class="text-muted">{{ row.method }}</small></td>
+                        <td>{{ row.data_days }}</td>
+                        <td>
+                            {% if row.actual_return is not None %}
+                                <span class="{% if row.actual_return > 0 %}text-success{% elif row.actual_return < 0 %}text-danger{% endif %}">
+                                    {% if row.actual_return > 0 %}+{% endif %}{{ row.actual_return|floatformat:1 }}%
+                                </span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.actual_dir %}
+                                <span class="badge badge-{{ row.actual_dir }} text-uppercase" style="font-size:0.65rem;">{{ row.actual_dir }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="hit-icon">
+                            {% if row.was_correct is None %}
+                                <span class="hit-na">·</span>
+                            {% elif row.was_correct %}
+                                <span class="hit-yes">✓</span>
+                            {% else %}
+                                <span class="hit-no">✗</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if total_signals > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    fetch('{% url "ob_forecast:ob_backtest_data" zone=zone %}')
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.labels || data.labels.length === 0) return;
+            const ctx = document.getElementById('backtestChart').getContext('2d');
+            const datasets = [
+                {
+                    label: 'Signal Score',
+                    data: data.labels.map(function (x, i) { return { x: x, y: data.signal_score[i] }; }),
+                    borderColor: '#1565c0',
+                    backgroundColor: 'rgba(21,101,192,0.1)',
+                    yAxisID: 'ySignal',
+                    tension: 0.3,
+                    pointRadius: 2,
+                    fill: false,
+                },
+                {
+                    label: 'P3A_82 actual 7d return %',
+                    data: data.labels.map(function (x, i) {
+                        return data.actual_return_pct[i] !== null ? { x: x, y: data.actual_return_pct[i] } : null;
+                    }).filter(Boolean),
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25,135,84,0.15)',
+                    yAxisID: 'yReturn',
+                    type: 'bar',
+                    barThickness: 4,
+                },
+            ];
+            if (data.index && data.index.length) {
+                datasets.push({
+                    label: 'P3A_82',
+                    data: data.index,
+                    borderColor: '#6610f2',
+                    borderWidth: 1,
+                    borderDash: [4, 4],
+                    yAxisID: 'yIndex',
+                    tension: 0.2,
+                    pointRadius: 0,
+                    type: 'line',
+                });
+            }
+            new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { type: 'category', ticks: { maxTicksLimit: 12 } },
+                        ySignal: {
+                            type: 'linear', position: 'left',
+                            title: { display: true, text: 'Signal score' },
+                            grid: { color: 'rgba(0,0,0,0.05)' },
+                        },
+                        yReturn: {
+                            type: 'linear', position: 'right',
+                            title: { display: true, text: 'P3A_82 7d return %' },
+                            grid: { drawOnChartArea: false },
+                        },
+                        yIndex: {
+                            type: 'linear', position: 'right',
+                            display: false,
+                            grid: { drawOnChartArea: false },
+                        },
+                    },
+                },
+            });
+        })
+        .catch(function (e) { console.error('Backtest chart error', e); });
+});
+</script>
+{% endif %}
+{% endblock %}

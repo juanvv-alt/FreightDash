@@ -261,3 +261,36 @@ class OBForecastViewTestCase(TestCase):
     def test_delete_series_get_redirects(self):
         resp = self.client.get("/ob-forecast/delete-series/")
         self.assertEqual(resp.status_code, 302)
+
+    def test_backtest_page_empty(self):
+        resp = self.client.get("/ob-forecast/backtest/NE_ASIA/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "NE Asia")
+
+    def test_backtest_page_unknown_zone_redirects(self):
+        resp = self.client.get("/ob-forecast/backtest/FAKE/")
+        self.assertEqual(resp.status_code, 302)
+
+    def test_run_backtest_computes_signals(self):
+        today = date.today()
+        for i in range(20):
+            d = today - timedelta(days=i)
+            OBTonnageSnapshot.objects.create(
+                date=d, zone="NE_ASIA", series="TOTAL", vessel_count=60
+            )
+        resp = self.client.post("/ob-forecast/run-backtest/NE_ASIA/")
+        self.assertEqual(resp.status_code, 302)
+        self.assertGreater(OBForecastSignal.objects.filter(zone="NE_ASIA").count(), 0)
+
+    def test_backtest_data_endpoint(self):
+        today = date.today()
+        OBForecastSignal.objects.create(
+            date=today, zone="NE_ASIA", direction="bullish",
+            score=1.2, confidence=0.5, method="zscore", data_days=20,
+        )
+        resp = self.client.get("/ob-forecast/backtest-data/NE_ASIA/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("labels", data)
+        self.assertIn("signal_score", data)
+        self.assertIn("accuracy_pct", data)
