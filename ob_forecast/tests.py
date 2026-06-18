@@ -1,15 +1,18 @@
 from datetime import date, timedelta
 
 from django.test import TestCase
+import pandas as pd
 
 from voyage.models import AvailableIndex, DailyIndexValue
 
 from .analytics import (
     OBSignalResult,
+    _nearest_price,
     generate_ob_signal,
     load_panamax_index,
     load_zone_frame,
     persist_ob_signal,
+    SERIES_WEIGHTS,
 )
 from .models import OBForecastSignal, OBTonnageSnapshot
 
@@ -109,6 +112,23 @@ class OBSignalAnalyticsTestCase(TestCase):
             self.assertLessEqual(result.confidence, 0.90)
             self.assertTrue(len(result.drivers) >= 1)
 
+    def test_in_port_weight_amplifies_bullish(self):
+        """IN_PORT at 2× weight should dominate a bullish signal over equal BALLAST/TOTAL bearish."""
+        self.assertEqual(SERIES_WEIGHTS["IN_PORT"], 2.0)
+        today = date.today()
+        # Create 20 days of data: IN_PORT strongly elevated, BALLAST mildly elevated
+        for i in range(20):
+            d = today - timedelta(days=19 - i)
+            # baseline low, then spike on last day
+            in_port = 30 + (20 if i == 19 else 0)  # spike last day
+            ballast = 40 + (5 if i == 19 else 0)   # mild ballast rise (bearish)
+            OBTonnageSnapshot.objects.create(date=d, zone="NE_ASIA", series="IN_PORT", vessel_count=in_port)
+            OBTonnageSnapshot.objects.create(date=d, zone="NE_ASIA", series="BALLAST_AT_SEA", vessel_count=ballast)
+        result = generate_ob_signal("NE_ASIA")
+        # IN_PORT is bullish (2× weight), BALLAST is bearish (1× weight); 2× should tip result bullish
+        self.assertEqual(result.direction, "bullish",
+                         f"Expected bullish with dominant IN_PORT (2× weight), got {result.direction}")
+
 
 class OBLoadPanamaxIndexTestCase(TestCase):
     def setUp(self):
@@ -135,6 +155,34 @@ class OBLoadPanamaxIndexTestCase(TestCase):
         s = load_panamax_index(as_of=today)
         self.assertEqual(len(s), 1)
         self.assertAlmostEqual(float(s.iloc[0]), 9250.0)
+
+
+class OBNearestPriceTestCase(TestCase):
+    def test_nearest_price_exact_match(self):
+        today = date.today()
+        s = pd.Series([100.0, 101.0], index=pd.to_datetime([today - timedelta(days=1), today]))
+        result = _nearest_price(s, today)
+        self.assertAlmostEqual(result, 101.0)
+
+    def test_nearest_price_forward_fill_gap(self):
+        today = date.today()
+        # Series has Friday data but not Saturday
+        friday = today - timedelta(days=today.weekday() + 3)  # some past Friday
+        saturday = friday + timedelta(days=1)
+        s = pd.Series([99.0], index=pd.to_datetime([friday]))
+        result = _nearest_price(s, saturday)
+        self.assertAlmostEqual(result, 99.0)
+
+    def test_nearest_price_exceeds_gap(self):
+        today = date.today()
+        old_date = today - timedelta(days=10)
+        s = pd.Series([99.0], index=pd.to_datetime([old_date]))
+        result = _nearest_price(s, today)
+        self.assertIsNone(result)
+
+    def test_nearest_price_empty_series(self):
+        s = pd.Series(dtype=float)
+        self.assertIsNone(_nearest_price(s, date.today()))
 
 
 class OBForecastViewTestCase(TestCase):
