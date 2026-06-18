@@ -87,6 +87,24 @@ def load_secondary_index(as_of=None):
     return pd.Series([r[1] for r in rows], index=idx).sort_index()
 
 
+def _nearest_price(series, target_date, max_gap_days=5):
+    """Return the last available price on or before target_date.
+
+    Returns None if no price exists within max_gap_days.
+    A gap of 5 days covers weekends (2) + a typical long holiday (3);
+    Baltic Exchange data gaps rarely exceed 4 days in practice.
+    """
+    if series.empty:
+        return None
+    ts = pd.Timestamp(target_date)
+    available = series[series.index <= ts]
+    if available.empty:
+        return None
+    if (ts - available.index[-1]).days > max_gap_days:
+        return None
+    return float(available.iloc[-1])
+
+
 def _rolling_zscore(series, window=28):
     min_periods = max(7, window // 3)
     mean = series.rolling(window, min_periods=min_periods).mean()

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from voyage.models import DailyIndexValue
 
-from .analytics import generate_ob_signal, load_panamax_index, load_secondary_index, persist_ob_signal
+from .analytics import _nearest_price, generate_ob_signal, load_panamax_index, load_secondary_index, persist_ob_signal
 from .analytics import SECONDARY_INDEX_NAME
 from .models import (
     SERIES_CHOICES,
@@ -298,9 +298,9 @@ def ob_backtest_view(request, zone):
         actual_return = None
         actual_dir = None
         hit = None
-        try:
-            price_start = float(index_series.loc[pd.Timestamp(sig.date)])
-            price_end = float(index_series.loc[pd.Timestamp(outcome_date)])
+        price_start = _nearest_price(index_series, sig.date)
+        price_end = _nearest_price(index_series, outcome_date)
+        if price_start is not None and price_end is not None:
             actual_return = round((price_end - price_start) / price_start * 100, 2)
             if actual_return > 1.5:
                 actual_dir = "bullish"
@@ -313,8 +313,6 @@ def ob_backtest_view(request, zone):
                 total_evaluated += 1
                 if hit:
                     correct += 1
-        except KeyError:
-            pass
         rows.append({
             "date": sig.date,
             "direction": sig.direction,
@@ -351,15 +349,15 @@ def ob_backtest_data(request, zone):
         labels.append(sig.date.isoformat())
         signal_scores.append(round(sig.score, 3))
         confidences.append(round(sig.confidence, 3))
-        try:
-            p0 = float(index_series.loc[pd.Timestamp(sig.date)])
-            p1 = float(index_series.loc[pd.Timestamp(outcome_date)])
+        p0 = _nearest_price(index_series, sig.date)
+        p1 = _nearest_price(index_series, outcome_date)
+        if p0 is not None and p1 is not None:
             ret = round((p1 - p0) / p0 * 100, 2)
             actual_returns.append(ret)
             actual_dir = "bullish" if ret > 1.5 else ("bearish" if ret < -1.5 else "neutral")
             hit = (sig.direction == actual_dir) if actual_dir != "neutral" else None
             was_correct_list.append(hit)
-        except KeyError:
+        else:
             actual_returns.append(None)
             was_correct_list.append(None)
     index_points = [
