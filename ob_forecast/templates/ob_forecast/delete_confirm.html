@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Delete Series — OB Forecast{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-md-6">
+        <div class="card border-danger" style="border-radius:12px;">
+            <div class="card-header bg-danger text-white" style="border-radius:12px 12px 0 0;">
+                <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Confirm Delete</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-1">You are about to permanently delete:</p>
+                <ul class="mb-3">
+                    <li><strong>{{ count }}</strong> row{{ count|pluralize }} of historical data</li>
+                    <li>Zone: <strong>{{ zone_label }}</strong></li>
+                    <li>Series: <strong>{{ series_label }}</strong></li>
+                </ul>
+                <div class="alert alert-warning py-2" style="font-size:0.875rem;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Forecast signals for <strong>{{ zone_label }}</strong> will also be cleared.
+                    Use <em>Run Forecast</em> to regenerate after re-uploading.
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <a href="{% url 'ob_forecast:ob_forecast' %}" class="btn btn-secondary flex-fill">
+                        <i class="fas fa-times me-1"></i>Cancel
+                    </a>
+                    <form method="post" action="{% url 'ob_forecast:ob_delete_series' %}" class="flex-fill">
+                        {% csrf_token %}
+                        <input type="hidden" name="zone" value="{{ zone }}">
+                        <input type="hidden" name="series" value="{{ series }}">
+                        <input type="hidden" name="confirmed" value="1">
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="fas fa-trash me-1"></i>Delete {{ count }} row{{ count|pluralize }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

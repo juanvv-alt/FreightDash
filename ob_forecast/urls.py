@@ -14,4 +14,5 @@ urlpatterns = [
     path("ob-forecast/upload/", views.ob_upload, name="ob_upload"),
     path("ob-forecast/daily-entry/", views.ob_daily_entry, name="ob_daily_entry"),
     path("ob-forecast/aggregate/", views.ob_aggregate, name="ob_aggregate"),
+    path("ob-forecast/delete-series/", views.ob_delete_series, name="ob_delete_series"),
 ]

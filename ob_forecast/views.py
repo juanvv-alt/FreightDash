@@ -3,6 +3,7 @@ import io
 from collections import defaultdict
 from datetime import date, timedelta
 
+from django.contrib import messages
 from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -21,6 +22,8 @@ from .models import (
 ZONE_LABELS = dict(ZONE_CHOICES)
 SERIES_LABELS = dict(SERIES_CHOICES)
 ZONES = [z[0] for z in ZONE_CHOICES]
+VALID_ZONES = {z[0] for z in ZONE_CHOICES}
+VALID_SERIES = {s[0] for s in SERIES_CHOICES}
 
 
 def _latest_ob_signal(zone, today):
@@ -138,8 +141,6 @@ def ob_upload(request):
     if not zone or not series or not uploaded_file:
         return redirect("ob_forecast:ob_forecast")
 
-    VALID_ZONES = {z[0] for z in ZONE_CHOICES}
-    VALID_SERIES = {s[0] for s in SERIES_CHOICES}
     if zone not in VALID_ZONES or series not in VALID_SERIES:
         return redirect("ob_forecast:ob_forecast")
 
@@ -216,3 +217,34 @@ def ob_aggregate(request):
         persist_ob_signal(result, today)
 
     return redirect("ob_forecast:ob_forecast")
+
+
+def ob_delete_series(request):
+    if request.method != "POST":
+        return redirect("ob_forecast:ob_forecast")
+
+    zone = request.POST.get("zone", "").strip()
+    series = request.POST.get("series", "").strip()
+
+    if zone not in VALID_ZONES or series not in VALID_SERIES:
+        return redirect("ob_forecast:ob_forecast")
+
+    count = OBTonnageSnapshot.objects.filter(zone=zone, series=series).count()
+
+    if request.POST.get("confirmed") == "1":
+        OBTonnageSnapshot.objects.filter(zone=zone, series=series).delete()
+        OBForecastSignal.objects.filter(zone=zone).delete()
+        messages.success(
+            request,
+            f"Deleted {count} rows for {ZONE_LABELS[zone]} / {SERIES_LABELS[series]}. "
+            f"Forecast signals for {ZONE_LABELS[zone]} cleared — run forecast to regenerate.",
+        )
+        return redirect("ob_forecast:ob_forecast")
+
+    return render(request, "ob_forecast/delete_confirm.html", {
+        "zone": zone,
+        "zone_label": ZONE_LABELS[zone],
+        "series": series,
+        "series_label": SERIES_LABELS[series],
+        "count": count,
+    })

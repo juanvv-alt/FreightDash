@@ -211,6 +211,35 @@
                 {% endif %}
             </div>
         </div>
+
+        <div class="card entry-section mt-3 border-danger">
+            <div class="card-body">
+                <h6 class="mb-2 text-danger"><i class="fas fa-trash me-2"></i>Delete Historical Series</h6>
+                <p class="text-muted" style="font-size:0.8rem;">Select a zone + series to delete all uploaded historical data for that combination.</p>
+                <form method="post" action="{% url 'ob_forecast:ob_delete_series' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="zone" class="form-select form-select-sm" required>
+                            <option value="">— select zone —</option>
+                            {% for zone_key, zone_label in zones %}
+                            <option value="{{ zone_key }}">{{ zone_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <select name="series" class="form-select form-select-sm" required>
+                            <option value="">— select series —</option>
+                            {% for series_key, series_label in series_choices %}
+                            <option value="{{ series_key }}">{{ series_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                        <i class="fas fa-trash me-1"></i>Delete Series
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 
 </div>

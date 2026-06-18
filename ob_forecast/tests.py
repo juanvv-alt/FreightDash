@@ -218,3 +218,46 @@ class OBForecastViewTestCase(TestCase):
         resp = self.client.post("/ob-forecast/aggregate/")
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(OBForecastSignal.objects.filter(date=today, zone="NE_ASIA").exists())
+
+    def test_delete_series_shows_confirmation(self):
+        today = date.today()
+        OBTonnageSnapshot.objects.create(
+            date=today, zone="NE_ASIA", series="BALLAST_AT_SEA", vessel_count=52
+        )
+        resp = self.client.post(
+            "/ob-forecast/delete-series/",
+            {"zone": "NE_ASIA", "series": "BALLAST_AT_SEA"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "NE Asia")
+        self.assertContains(resp, "Ballast at Sea")
+
+    def test_delete_series_confirmed_removes_rows_and_signals(self):
+        today = date.today()
+        OBTonnageSnapshot.objects.create(
+            date=today, zone="NE_ASIA", series="BALLAST_AT_SEA", vessel_count=52
+        )
+        OBForecastSignal.objects.create(
+            date=today, zone="NE_ASIA", direction="bullish",
+            score=1.0, confidence=0.5, method="zscore", data_days=20,
+        )
+        resp = self.client.post(
+            "/ob-forecast/delete-series/",
+            {"zone": "NE_ASIA", "series": "BALLAST_AT_SEA", "confirmed": "1"},
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(
+            OBTonnageSnapshot.objects.filter(zone="NE_ASIA", series="BALLAST_AT_SEA").count(), 0
+        )
+        self.assertEqual(OBForecastSignal.objects.filter(zone="NE_ASIA").count(), 0)
+
+    def test_delete_series_rejects_invalid_zone(self):
+        resp = self.client.post(
+            "/ob-forecast/delete-series/",
+            {"zone": "FAKE", "series": "BALLAST_AT_SEA"},
+        )
+        self.assertEqual(resp.status_code, 302)
+
+    def test_delete_series_get_redirects(self):
+        resp = self.client.get("/ob-forecast/delete-series/")
+        self.assertEqual(resp.status_code, 302)
