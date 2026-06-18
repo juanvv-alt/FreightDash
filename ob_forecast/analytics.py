@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
@@ -26,6 +27,11 @@ SERIES_WEIGHTS = {
 
 # Score threshold for bullish/bearish classification.
 DIRECTION_THRESHOLD = 0.5
+
+# How many calendar days ahead to evaluate the signal's prediction.
+# After running the lag analysis in the backtest, update this to the
+# lag that shows the highest accuracy.
+OUTCOME_LAG_DAYS = 7
 
 SERIES_LABEL = {
     "BALLAST_AT_SEA": "ballast vessels at sea",
@@ -103,6 +109,43 @@ def _nearest_price(series, target_date, max_gap_days=5):
     if (ts - available.index[-1]).days > max_gap_days:
         return None
     return float(available.iloc[-1])
+
+
+_SWEEP_LAGS = [7, 14, 21]
+
+
+def _lag_sweep(signals, index_series):
+    """For each lag in _SWEEP_LAGS, compute accuracy against the primary index.
+
+    Returns list of dicts: [{"lag": 7, "evaluated": N, "correct": M, "accuracy_pct": X}, ...]
+    Returns [] when there are no signals to evaluate.
+    """
+    if not signals:
+        return []
+    results = []
+    for lag in _SWEEP_LAGS:
+        correct = 0
+        evaluated = 0
+        for sig in signals:
+            outcome_date = sig.date + timedelta(days=lag)
+            p0 = _nearest_price(index_series, sig.date)
+            p1 = _nearest_price(index_series, outcome_date)
+            if p0 is None or p1 is None:
+                continue
+            ret = (p1 - p0) / p0 * 100
+            actual_dir = "bullish" if ret > 1.5 else ("bearish" if ret < -1.5 else "neutral")
+            if actual_dir == "neutral":
+                continue
+            evaluated += 1
+            if sig.direction == actual_dir:
+                correct += 1
+        results.append({
+            "lag": lag,
+            "evaluated": evaluated,
+            "correct": correct,
+            "accuracy_pct": round(correct / evaluated * 100, 1) if evaluated else None,
+        })
+    return results
 
 
 def _rolling_zscore(series, window=28):

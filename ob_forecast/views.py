@@ -11,8 +11,11 @@ from django.utils import timezone
 
 from voyage.models import DailyIndexValue
 
-from .analytics import _nearest_price, generate_ob_signal, load_panamax_index, load_secondary_index, persist_ob_signal
-from .analytics import SECONDARY_INDEX_NAME
+from .analytics import (
+    _lag_sweep, _nearest_price, generate_ob_signal,
+    load_panamax_index, load_secondary_index, persist_ob_signal,
+    OUTCOME_LAG_DAYS, SECONDARY_INDEX_NAME,
+)
 from .models import (
     SERIES_CHOICES,
     ZONE_CHOICES,
@@ -294,7 +297,7 @@ def ob_backtest_view(request, zone):
     correct = 0
     total_evaluated = 0
     for sig in signals:
-        outcome_date = sig.date + timedelta(days=7)
+        outcome_date = sig.date + timedelta(days=OUTCOME_LAG_DAYS)
         actual_return = None
         actual_dir = None
         hit = None
@@ -325,6 +328,7 @@ def ob_backtest_view(request, zone):
             "was_correct": hit,
         })
     accuracy_pct = round(correct / total_evaluated * 100, 1) if total_evaluated else None
+    lag_sweep = _lag_sweep(signals, index_series)
     context = {
         "zone": zone,
         "zone_label": ZONE_LABELS[zone],
@@ -333,6 +337,7 @@ def ob_backtest_view(request, zone):
         "total_signals": len(signals),
         "total_evaluated": total_evaluated,
         "accuracy_pct": accuracy_pct,
+        "lag_sweep": lag_sweep,
         "today": today,
     }
     return render(request, "ob_forecast/backtest.html", context)
@@ -345,7 +350,7 @@ def ob_backtest_data(request, zone):
     index_series = load_panamax_index()
     labels, signal_scores, confidences, actual_returns, was_correct_list = [], [], [], [], []
     for sig in signals:
-        outcome_date = sig.date + timedelta(days=7)
+        outcome_date = sig.date + timedelta(days=OUTCOME_LAG_DAYS)
         labels.append(sig.date.isoformat())
         signal_scores.append(round(sig.score, 3))
         confidences.append(round(sig.confidence, 3))
@@ -366,6 +371,7 @@ def ob_backtest_data(request, zone):
     ]
     correct = sum(1 for x in was_correct_list if x is True)
     evaluated = sum(1 for x in was_correct_list if x is not None)
+    lag_sweep = _lag_sweep(signals, index_series)
     return JsonResponse({
         "labels": labels,
         "signal_score": signal_scores,
@@ -375,4 +381,5 @@ def ob_backtest_data(request, zone):
         "index": index_points,
         "accuracy_pct": round(correct / evaluated * 100, 1) if evaluated else None,
         "total_signals": len(signals),
+        "lag_sweep": lag_sweep,
     })

@@ -81,6 +81,43 @@
     </div>
 </div>
 
+{# Lag analysis table #}
+{% if lag_sweep %}
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <div class="card-header bg-transparent border-bottom" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:1px; color:#6c757d;">
+        Lag Analysis — accuracy at different prediction horizons
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Horizon</th>
+              <th class="text-end">Evaluated</th>
+              <th class="text-end">Correct</th>
+              <th class="text-end">Accuracy</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lag_row in lag_sweep %}
+            <tr>
+              <td>D+{{ lag_row.lag }} days</td>
+              <td class="text-end">{{ lag_row.evaluated }}</td>
+              <td class="text-end">{{ lag_row.correct }}</td>
+              <td class="text-end fw-bold {% if lag_row.accuracy_pct != None and lag_row.accuracy_pct >= 55 %}text-success{% elif lag_row.accuracy_pct != None and lag_row.accuracy_pct < 45 %}text-danger{% else %}text-warning{% endif %}">
+                {% if lag_row.accuracy_pct != None %}{{ lag_row.accuracy_pct }}%{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# Chart #}
 <div class="card mb-4" style="border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
     <div class="card-body">

@@ -342,3 +342,17 @@ class OBForecastViewTestCase(TestCase):
         self.assertIn("labels", data)
         self.assertIn("signal_score", data)
         self.assertIn("accuracy_pct", data)
+
+    def test_backtest_data_lag_sweep(self):
+        today = date.today()
+        OBForecastSignal.objects.create(
+            date=today - timedelta(days=30), zone="NE_ASIA", direction="bullish",
+            score=1.2, confidence=0.5, method="zscore", data_days=20,
+        )
+        resp = self.client.get("/ob-forecast/backtest-data/NE_ASIA/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("lag_sweep", data)
+        self.assertEqual(len(data["lag_sweep"]), 3)
+        lags = [row["lag"] for row in data["lag_sweep"]]
+        self.assertEqual(lags, [7, 14, 21])
