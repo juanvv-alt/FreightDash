@@ -15,6 +15,18 @@ SERIES_METRIC_SIGN = {
     "TOTAL": -1,
 }
 
+# Relative weights for each series in the z-score and snapshot signals.
+# IN_PORT is given 2× weight per domain knowledge: vessels waiting in port
+# are a stronger bullish indicator than ballast counts.
+SERIES_WEIGHTS = {
+    "BALLAST_AT_SEA": 1.0,
+    "IN_PORT": 2.0,
+    "TOTAL": 1.0,
+}
+
+# Score threshold for bullish/bearish classification.
+DIRECTION_THRESHOLD = 0.5
+
 SERIES_LABEL = {
     "BALLAST_AT_SEA": "ballast vessels at sea",
     "IN_PORT": "vessels in port",
@@ -88,9 +100,9 @@ def _weekly_changes(series):
 
 
 def _direction_from_score(score):
-    if score > 0.5:
+    if score > DIRECTION_THRESHOLD:
         return "bullish"
-    if score < -0.5:
+    if score < -DIRECTION_THRESHOLD:
         return "bearish"
     return "neutral"
 
@@ -108,25 +120,31 @@ def _snapshot_signal(df):
     # If TOTAL series is available, use it as the normalizer directly since
     # BALLAST_AT_SEA and IN_PORT are sub-components — summing them with TOTAL
     # would double-count and compress all scores.
+    # Note: TOTAL also participates as a weighted term in the numerator with its own
+    # sign (-1). Its weight is kept at 1.0 since it already acts as the scale normalizer.
     fleet_size = float(latest.get("TOTAL", 0) or 0) if "TOTAL" in series_list else 0.0
     total = max(1.0, fleet_size or sum(float(latest.get(s, 0) or 0) for s in series_list))
-    score = 0.0
+    weighted_sum = 0.0
+    weight_total = 0.0
     drivers = []
     for s in series_list:
         val = float(latest.get(s, 0) or 0)
         sign = SERIES_METRIC_SIGN[s]
-        score += sign * (val / total) * 3
+        w = SERIES_WEIGHTS.get(s, 1.0)
+        weighted_sum += w * sign * (val / total) * 3
+        weight_total += w
         drivers.append(
             f"{int(val)} {SERIES_LABEL[s]}"
             + (" → bearish pressure" if sign < 0 else " → bullish pressure")
         )
-    score = float(np.clip(score / len(series_list), -3, 3))
+    score = float(np.clip(weighted_sum / max(weight_total, 1.0), -3, 3))
     drivers.append("Signal from snapshot only — accuracy improves as history accumulates.")
     return score, drivers
 
 
 def _zscore_signal(df):
-    contributions = []
+    weighted_contributions = []
+    weights = []
     drivers = []
     for s in _available_series(df):
         if df[s].dropna().empty:
@@ -136,8 +154,10 @@ def _zscore_signal(df):
             continue
         z_val = float(z.dropna().iloc[-1])
         sign = SERIES_METRIC_SIGN[s]
+        w = SERIES_WEIGHTS.get(s, 1.0)
         signed = sign * float(np.clip(z_val, -3, 3))
-        contributions.append(signed)
+        weighted_contributions.append(signed)
+        weights.append(w)
         if abs(z_val) >= 1.0:
             tone = "bearish" if signed < 0 else "bullish"
             updown = "above" if z_val > 0 else "below"
@@ -145,7 +165,10 @@ def _zscore_signal(df):
                 f"{SERIES_LABEL[s].capitalize()} is {abs(z_val):.1f}σ "
                 f"{updown} its 4-week norm → {tone} pressure"
             )
-    score = sum(contributions) / len(contributions) if contributions else 0.0
+    score = (
+        sum(s * w for s, w in zip(weighted_contributions, weights)) / sum(weights)
+        if weights else 0.0
+    )
     return score, drivers
 
 
