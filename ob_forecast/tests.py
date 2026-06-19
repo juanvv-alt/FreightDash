@@ -356,3 +356,70 @@ class OBForecastViewTestCase(TestCase):
         self.assertEqual(len(data["lag_sweep"]), 3)
         lags = [row["lag"] for row in data["lag_sweep"]]
         self.assertEqual(lags, [7, 14, 21])
+
+    def test_backtest_data_returns_index_name(self):
+        today = date.today()
+        OBForecastSignal.objects.create(
+            date=today, zone="NE_ASIA", direction="bullish",
+            score=1.0, confidence=0.5, method="zscore", data_days=20,
+        )
+        resp = self.client.get("/ob-forecast/backtest-data/NE_ASIA/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("index_name", data)
+
+
+class OBIndexSelectorTestCase(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.user = User.objects.create_superuser("admin_sel", "sel@b.com", "pw")
+        self.client.force_login(self.user)
+        AvailableIndex.objects.get_or_create(
+            name="P3A_82",
+            defaults={"vessel_size": "panamax", "order": 1, "is_active": True},
+        )
+
+    def test_get_selected_index_defaults_to_index_name(self):
+        from ob_forecast.views import _get_selected_index
+        from ob_forecast.analytics import INDEX_NAME
+        response = self.client.get("/ob-forecast/")
+        self.assertEqual(_get_selected_index(response.wsgi_request), INDEX_NAME)
+
+    def test_set_index_saves_to_session(self):
+        response = self.client.post("/ob-forecast/set-index/", {"index_name": "P3A_82"})
+        self.assertRedirects(response, "/ob-forecast/", fetch_redirect_response=False)
+        self.assertEqual(self.client.session.get("ob_selected_index"), "P3A_82")
+
+    def test_set_index_rejects_invalid_name(self):
+        response = self.client.post("/ob-forecast/set-index/", {"index_name": "FAKE_INDEX"})
+        self.assertRedirects(response, "/ob-forecast/", fetch_redirect_response=False)
+        self.assertNotIn("ob_selected_index", self.client.session)
+
+    def test_set_index_get_redirects(self):
+        response = self.client.get("/ob-forecast/set-index/")
+        self.assertEqual(response.status_code, 302)
+
+
+class OBGenerateSignalIndexNameTestCase(TestCase):
+    def setUp(self):
+        self.index, _ = AvailableIndex.objects.get_or_create(
+            name="P3A_82",
+            defaults={"vessel_size": "panamax"},
+        )
+        self.zone = "NE_ASIA"
+        today = date.today()
+        for i in range(5):
+            d = today - timedelta(days=i)
+            OBTonnageSnapshot.objects.create(
+                date=d, zone=self.zone, series="TOTAL", vessel_count=60
+            )
+            DailyIndexValue.objects.create(index=self.index, date=d, value=9000 + i * 20)
+
+    def test_generate_ob_signal_accepts_index_name(self):
+        result = generate_ob_signal(self.zone, index_name="P3A_82")
+        self.assertIsInstance(result.direction, str)
+        self.assertIn(result.direction, ("bullish", "bearish", "neutral"))
+
+    def test_generate_ob_signal_unknown_index_falls_back_gracefully(self):
+        result = generate_ob_signal(self.zone, index_name="NO_SUCH_INDEX")
+        self.assertIn(result.method, ("snapshot", "zscore", "insufficient"))

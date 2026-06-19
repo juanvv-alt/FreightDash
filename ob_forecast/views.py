@@ -9,12 +9,12 @@ from django.http import HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from voyage.models import DailyIndexValue
+from voyage.models import AvailableIndex, DailyIndexValue
 
 from .analytics import (
     _lag_sweep, _nearest_price, generate_ob_signal,
-    load_panamax_index, load_secondary_index, persist_ob_signal,
-    OUTCOME_LAG_DAYS, SECONDARY_INDEX_NAME,
+    load_index, load_panamax_index, load_secondary_index, persist_ob_signal,
+    INDEX_NAME, OUTCOME_LAG_DAYS, SECONDARY_INDEX_NAME,
 )
 from .models import (
     SERIES_CHOICES,
@@ -29,6 +29,30 @@ SERIES_LABELS = dict(SERIES_CHOICES)
 ZONES = [z[0] for z in ZONE_CHOICES]
 VALID_ZONES = {z[0] for z in ZONE_CHOICES}
 VALID_SERIES = {s[0] for s in SERIES_CHOICES}
+
+SESSION_KEY_INDEX = "ob_selected_index"
+
+
+def _get_selected_index(request):
+    name = request.session.get(SESSION_KEY_INDEX, INDEX_NAME)
+    valid = set(
+        AvailableIndex.objects.filter(vessel_size="panamax", is_active=True)
+        .values_list("name", flat=True)
+    )
+    return name if name in valid else INDEX_NAME
+
+
+def ob_set_index(request):
+    if request.method != "POST":
+        return redirect("ob_forecast:ob_forecast")
+    name = request.POST.get("index_name", "").strip()
+    valid = set(
+        AvailableIndex.objects.filter(vessel_size="panamax", is_active=True)
+        .values_list("name", flat=True)
+    )
+    if name in valid:
+        request.session[SESSION_KEY_INDEX] = name
+    return redirect("ob_forecast:ob_forecast")
 
 
 def _latest_ob_signal(zone, today):
@@ -57,6 +81,12 @@ def _latest_ob_signal(zone, today):
 
 def ob_forecast_view(request):
     today = timezone.localdate()
+    selected_index = _get_selected_index(request)
+    panamax_indices = list(
+        AvailableIndex.objects.filter(vessel_size="panamax", is_active=True)
+        .order_by("order")
+        .values_list("name", flat=True)
+    )
     cards = []
     for zone_key, zone_label in ZONE_CHOICES:
         signal = _latest_ob_signal(zone_key, today)
@@ -86,6 +116,8 @@ def ob_forecast_view(request):
         "series_choices": SERIES_CHOICES,
         "upload_log": upload_log,
         "today": today,
+        "selected_index": selected_index,
+        "panamax_indices": panamax_indices,
     }
     return render(request, "ob_forecast/ob_forecast.html", context)
 
@@ -96,6 +128,7 @@ def ob_chart_data(request, zone):
 
     today = timezone.localdate()
     start = today - timedelta(days=180)
+    selected_index = _get_selected_index(request)
 
     rows = (
         OBTonnageSnapshot.objects.filter(zone=zone, date__gte=start)
@@ -116,7 +149,7 @@ def ob_chart_data(request, zone):
     }
 
     idx_qs = (
-        DailyIndexValue.objects.filter(index__name="P3A_82", date__gte=start)
+        DailyIndexValue.objects.filter(index__name=selected_index, date__gte=start)
         .order_by("date")
         .values_list("date", "value")
     )
@@ -138,7 +171,7 @@ def ob_chart_data(request, zone):
         {
             "labels": labels,
             "series": series_out,
-            "index_name": "P3A_82",
+            "index_name": selected_index,
             "index": index_points,
             "index2_name": SECONDARY_INDEX_NAME,
             "index2": sec_points,
@@ -228,8 +261,9 @@ def ob_aggregate(request):
         return HttpResponseNotAllowed(["POST"])
 
     today = timezone.localdate()
+    selected_index = _get_selected_index(request)
     for zone_key, _ in ZONE_CHOICES:
-        result = generate_ob_signal(zone_key, as_of=today)
+        result = generate_ob_signal(zone_key, as_of=today, index_name=selected_index)
         persist_ob_signal(result, today)
 
     return redirect("ob_forecast:ob_forecast")
@@ -271,6 +305,7 @@ def ob_run_backtest(request, zone):
         return redirect("ob_forecast:ob_backtest", zone=zone)
     if zone not in VALID_ZONES:
         return redirect("ob_forecast:ob_forecast")
+    selected_index = _get_selected_index(request)
     dates = list(
         OBTonnageSnapshot.objects.filter(zone=zone)
         .values_list("date", flat=True)
@@ -278,7 +313,7 @@ def ob_run_backtest(request, zone):
         .distinct()
     )
     for d in dates:
-        result = generate_ob_signal(zone, as_of=d)
+        result = generate_ob_signal(zone, as_of=d, index_name=selected_index)
         persist_ob_signal(result, d)
     messages.success(
         request,
@@ -291,8 +326,9 @@ def ob_backtest_view(request, zone):
     if zone not in VALID_ZONES:
         return redirect("ob_forecast:ob_forecast")
     today = timezone.localdate()
+    selected_index = _get_selected_index(request)
     signals = list(OBForecastSignal.objects.filter(zone=zone).order_by("date"))
-    index_series = load_panamax_index()
+    index_series = load_index(selected_index)
     rows = []
     correct = 0
     total_evaluated = 0
@@ -339,6 +375,7 @@ def ob_backtest_view(request, zone):
         "accuracy_pct": accuracy_pct,
         "lag_sweep": lag_sweep,
         "today": today,
+        "selected_index": selected_index,
     }
     return render(request, "ob_forecast/backtest.html", context)
 
@@ -346,8 +383,9 @@ def ob_backtest_view(request, zone):
 def ob_backtest_data(request, zone):
     if zone not in VALID_ZONES:
         return JsonResponse({"error": "Unknown zone"}, status=404)
+    selected_index = _get_selected_index(request)
     signals = list(OBForecastSignal.objects.filter(zone=zone).order_by("date"))
-    index_series = load_panamax_index()
+    index_series = load_index(selected_index)
     labels, signal_scores, confidences, actual_returns, was_correct_list = [], [], [], [], []
     for sig in signals:
         outcome_date = sig.date + timedelta(days=OUTCOME_LAG_DAYS)
@@ -379,6 +417,7 @@ def ob_backtest_data(request, zone):
         "actual_return_pct": actual_returns,
         "was_correct": was_correct_list,
         "index": index_points,
+        "index_name": selected_index,
         "accuracy_pct": round(correct / evaluated * 100, 1) if evaluated else None,
         "total_signals": len(signals),
         "lag_sweep": lag_sweep,

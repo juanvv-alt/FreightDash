@@ -18,4 +18,5 @@ urlpatterns = [
     path("ob-forecast/backtest/<slug:zone>/", views.ob_backtest_view, name="ob_backtest"),
     path("ob-forecast/backtest-data/<slug:zone>/", views.ob_backtest_data, name="ob_backtest_data"),
     path("ob-forecast/run-backtest/<slug:zone>/", views.ob_run_backtest, name="ob_run_backtest"),
+    path("ob-forecast/set-index/", views.ob_set_index, name="ob_set_index"),
 ]

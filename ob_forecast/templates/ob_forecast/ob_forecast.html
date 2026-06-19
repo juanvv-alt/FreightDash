@@ -24,17 +24,29 @@
 {# ------------------------------------------------------------------ #}
 {# Section 1 — Header + Signal Cards                                   #}
 {# ------------------------------------------------------------------ #}
-<div class="d-flex justify-content-between align-items-center mb-1">
+<div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-2">
     <div>
         <h2 class="mb-0"><i class="fas fa-water me-2"></i>OB Forecast</h2>
         <p class="text-muted mb-0" style="font-size:0.9rem;">Panamax &middot; Pacific Zones</p>
     </div>
-    <form method="post" action="{% url 'ob_forecast:ob_aggregate' %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-primary">
-            <i class="fas fa-sync-alt me-1"></i>Run Forecast
-        </button>
-    </form>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        <form method="post" action="{% url 'ob_forecast:ob_set_index' %}" class="d-flex align-items-center gap-2">
+            {% csrf_token %}
+            <label class="text-muted mb-0" style="font-size:0.85rem; white-space:nowrap;">Index:</label>
+            <select name="index_name" class="form-select form-select-sm" style="width:auto;"
+                    onchange="this.form.submit()">
+                {% for idx_name in panamax_indices %}
+                <option value="{{ idx_name }}" {% if idx_name == selected_index %}selected{% endif %}>{{ idx_name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <form method="post" action="{% url 'ob_forecast:ob_aggregate' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-sync-alt me-1"></i>Run Forecast
+            </button>
+        </form>
+    </div>
 </div>
 
 <div class="row g-3 mb-4 mt-1">
@@ -58,7 +70,7 @@
                     <div class="confidence-fill" style="width: {{ card.confidence_pct }}%"></div>
                 </div>
                 <div class="text-muted mb-2" style="font-size:0.75rem;">
-                    Method: {{ card.signal.method }} &middot; {{ card.signal.data_days }}d data &middot; P3A_82
+                    Method: {{ card.signal.method }} &middot; {{ card.signal.data_days }}d data &middot; {{ selected_index }}
                 </div>
                 <hr class="my-2">
                 <ul class="driver-list">
@@ -80,7 +92,7 @@
 <div class="card chart-card mb-4">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">OB Tonnage vs P3A_82</h5>
+            <h5 class="mb-0">OB Tonnage vs {{ selected_index }}</h5>
             <ul class="nav nav-pills" id="zoneTabs">
                 {% for zone_key, zone_label in zones %}
                 <li class="nav-item">
@@ -297,7 +309,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (data.index2 && data.index2.length) {
             datasets.push({
-                label: data.index2_name || 'BPI TC Average',
+                label: data.index2_name || 'BPI82 5TC',
                 data: data.index2,
                 borderColor: '#198754',
                 borderWidth: 2,

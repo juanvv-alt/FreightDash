@@ -31,7 +31,7 @@
     <div>
         <h2 class="mb-1">
             <i class="fas fa-vial me-2"></i>Backtest
-            <small class="text-muted fs-6 fw-normal ms-2">{{ zone_label }} · Signal accuracy vs P3A_82</small>
+            <small class="text-muted fs-6 fw-normal ms-2">{{ zone_label }} · Signal accuracy vs {{ selected_index }}</small>
         </h2>
         <a href="{% url 'ob_forecast:ob_forecast' %}" class="text-muted" style="font-size:0.85rem;">
             <i class="fas fa-arrow-left me-1"></i>Back to OB Forecast
@@ -145,7 +145,7 @@
                         <th>Conf.</th>
                         <th>Method</th>
                         <th>Days data</th>
-                        <th>P3A_82 +7d</th>
+                        <th>{{ selected_index }} +7d</th>
                         <th>Outcome</th>
                         <th>Hit?</th>
                     </tr>
@@ -216,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     fill: false,
                 },
                 {
-                    label: 'P3A_82 actual 7d return %',
+                    label: (data.index_name || '{{ selected_index }}') + ' actual 7d return %',
                     data: data.labels.map(function (x, i) {
                         return data.actual_return_pct[i] !== null ? { x: x, y: data.actual_return_pct[i] } : null;
                     }).filter(Boolean),

@@ -8,7 +8,7 @@ from .models import OBForecastSignal, OBTonnageSnapshot
 from voyage.models import DailyIndexValue
 
 INDEX_NAME = "P3A_82"
-SECONDARY_INDEX_NAME = "BPI TC Average"
+SECONDARY_INDEX_NAME = "BPI82 5TC"
 
 SERIES_METRIC_SIGN = {
     "BALLAST_AT_SEA": -1,
@@ -69,9 +69,9 @@ def load_zone_frame(zone, as_of=None):
     return wide.sort_index()
 
 
-def load_panamax_index(as_of=None):
-    """P3A_82 daily closes → date-indexed Series."""
-    qs = DailyIndexValue.objects.filter(index__name=INDEX_NAME)
+def load_index(name, as_of=None):
+    """Any DailyIndexValue series by name → date-indexed Series."""
+    qs = DailyIndexValue.objects.filter(index__name=name)
     if as_of is not None:
         qs = qs.filter(date__lte=as_of)
     rows = list(qs.order_by("date").values_list("date", "value"))
@@ -79,18 +79,16 @@ def load_panamax_index(as_of=None):
         return pd.Series(dtype=float)
     idx = pd.to_datetime([r[0] for r in rows])
     return pd.Series([r[1] for r in rows], index=idx).sort_index()
+
+
+def load_panamax_index(as_of=None):
+    """P3A_82 daily closes → date-indexed Series."""
+    return load_index(INDEX_NAME, as_of=as_of)
 
 
 def load_secondary_index(as_of=None):
-    """BPI TC Average daily closes → date-indexed Series. Returns empty if not in DB."""
-    qs = DailyIndexValue.objects.filter(index__name=SECONDARY_INDEX_NAME)
-    if as_of is not None:
-        qs = qs.filter(date__lte=as_of)
-    rows = list(qs.order_by("date").values_list("date", "value"))
-    if not rows:
-        return pd.Series(dtype=float)
-    idx = pd.to_datetime([r[0] for r in rows])
-    return pd.Series([r[1] for r in rows], index=idx).sort_index()
+    """BPI82 5TC daily closes → date-indexed Series. Returns empty if not in DB."""
+    return load_index(SECONDARY_INDEX_NAME, as_of=as_of)
 
 
 def _nearest_price(series, target_date, max_gap_days=5):
@@ -261,8 +259,10 @@ def _fit_regression(df, index_series):
     return {"r2": r2, "n_weeks": len(frame), "predicted_next_change": predicted}
 
 
-def generate_ob_signal(zone, as_of=None):
+def generate_ob_signal(zone, as_of=None, index_name=None):
     """Compute the directional supply signal for one Pacific zone."""
+    if index_name is None:
+        index_name = INDEX_NAME
     result = OBSignalResult(zone=zone)
     df = load_zone_frame(zone, as_of=as_of)
     result.data_days = int(len(df))
@@ -281,7 +281,7 @@ def generate_ob_signal(zone, as_of=None):
         return result
 
     z_score, z_drivers = _zscore_signal(df)
-    index_series = load_panamax_index(as_of=as_of)
+    index_series = load_index(index_name, as_of=as_of)
     regression = _fit_regression(df, index_series)
 
     if regression is None or regression.get("predicted_next_change") is None:
