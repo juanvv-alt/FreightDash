@@ -33,9 +33,7 @@ services:
     restart: unless-stopped
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/juanvv-alt/freightdash:latest
     container_name: freightdash_web
     env_file: .env
     environment:
