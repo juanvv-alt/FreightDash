@@ -33,7 +33,9 @@ services:
     restart: unless-stopped
 
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: freightdash_web
     env_file: .env
     environment:
