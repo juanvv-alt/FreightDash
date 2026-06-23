@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ghcr.io/juanvv-alt/freightdash:latest
+    build: .
     container_name: freightdash_web
     env_file: .env
     environment:
