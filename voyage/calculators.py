@@ -3,6 +3,9 @@ TCE Calculator helper functions.
 Ported from the original PHP implementation.
 """
 
+# Address commission retained by the owner: 1 - 0.0375 (3.75%).
+ADDRESS_COMMISSION_FACTOR = 0.9625
+
 
 def calculate_vessel_comparison(global_inputs, voyages, vessels):
     """
@@ -25,7 +28,7 @@ def calculate_vessel_comparison(global_inputs, voyages, vessels):
     ifo_price = global_inputs['ifo_price']
     mgo_price = global_inputs['mgo_price']
     wf = global_inputs['weather_factor']
-    commission_factor = 0.9625  # 3.75% address commission
+    commission_factor = ADDRESS_COMMISSION_FACTOR
 
     voyage_results = []
     vessel_durations = [[0.0] * len(vessels) for _ in voyages]

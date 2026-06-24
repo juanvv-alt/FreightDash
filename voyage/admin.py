@@ -5,7 +5,10 @@ from django.utils.html import format_html
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 
+from core.admin_urls import register_admin_urls
+
 from .models import (
+    VESSEL_SIZE_CHOICES,
     AvailableIndex,
     CustomIndexPreset,
     DailyIndexValue,
@@ -17,15 +20,6 @@ from .models import (
     VesselSpeedProfile,
     VoyageFuelSplit,
 )
-
-
-VESSEL_SIZE_CHOICES = [
-    ('capesize', 'Capesize'),
-    ('panamax', 'Panamax'),
-    ('supramax', 'Supramax'),
-    ('handysize', 'Handysize'),
-    ('bunker', 'Bunker'),
-]
 
 
 @admin.register(RouteParameters)
@@ -273,12 +267,9 @@ def indices_config_view(request):
     return render(request, 'admin/indices_config.html', context)
 
 
-_voyage_original_get_urls = admin.site.get_urls
-
-
 def _voyage_admin_urls():
     from .views import upload_excel_indices, upload_batch_indices, review_excel_mappings
-    custom_urls = [
+    return [
         path(
             'upload-excel-indices/',
             admin.site.admin_view(upload_excel_indices),
@@ -300,10 +291,9 @@ def _voyage_admin_urls():
             name='indices-config',
         ),
     ]
-    return custom_urls + _voyage_original_get_urls()
 
 
-admin.site.get_urls = _voyage_admin_urls
+register_admin_urls(_voyage_admin_urls)
 
 
 from .models import FFACurve, FFACurvePeriod

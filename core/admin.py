@@ -10,6 +10,8 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
+
+from core.admin_urls import register_admin_urls
 from django.urls import path, reverse
 from django.utils import timezone
 
@@ -217,11 +219,8 @@ def database_tools_view(request):
 admin.site.register(MenuItem, MenuItemAdmin)
 
 
-_original_get_urls = admin.site.get_urls
-
-
 def _custom_admin_urls():
-    custom_urls = [
+    return [
         path(
             "menu-builder/",
             admin.site.admin_view(menu_builder_view),
@@ -233,7 +232,6 @@ def _custom_admin_urls():
             name="database-tools",
         ),
     ]
-    return custom_urls + _original_get_urls()
 
 
-admin.site.get_urls = _custom_admin_urls
+register_admin_urls(_custom_admin_urls)
