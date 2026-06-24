@@ -353,14 +353,14 @@
                 <div class="menu-group">
                     <button
                         type="button"
-                        class="menu-group-toggle {% if request.path|slice:':8' == '/indices/' and item.url == '/indices/' %}open{% elif request.path == item.url %}open{% else %}{% for child in item.children %}{% if request.path == child.url %}open{% endif %}{% endfor %}{% endif %}"
+                        class="menu-group-toggle {% if request.path == item.url %}open{% else %}{% for child in item.children %}{% if request.path == child.url %}open{% endif %}{% endfor %}{% endif %}"
                         data-menu-toggle="menuGroup{{ forloop.counter }}"
                     >
                         <i class="{{ item.icon }}"></i>
                         <span class="menu-text">{{ item.title }}</span>
                         <i class="fas fa-chevron-down chevron"></i>
                     </button>
-                    <div class="menu-group-links {% if request.path|slice:':8' == '/indices/' and item.url == '/indices/' %}open{% elif request.path == item.url %}open{% else %}{% for child in item.children %}{% if request.path == child.url %}open{% endif %}{% endfor %}{% endif %}" id="menuGroup{{ forloop.counter }}">
+                    <div class="menu-group-links {% if request.path == item.url %}open{% else %}{% for child in item.children %}{% if request.path == child.url %}open{% endif %}{% endfor %}{% endif %}" id="menuGroup{{ forloop.counter }}">
                         {% for child in item.children %}
                         <div class="list-group-item">
                             <a href="{{ child.url }}" class="{% if request.path == child.url %}active{% endif %}">

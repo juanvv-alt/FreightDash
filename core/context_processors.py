@@ -4,35 +4,27 @@ from django.db.utils import OperationalError, ProgrammingError
 from .models import MenuItem
 
 
+# Canonical navigation structure, grouped by function. This is both the
+# fallback used when the MenuItem table is empty AND the source the
+# `seed_menu` management command materialises into editable MenuItem rows,
+# so the two can never drift. Group headers use url '#': the sidebar renders
+# any item with children as a collapsing header button rather than a link.
 DEFAULT_MENU_ITEMS = [
     {
-        'title': 'TCE Calculator',
-        'url': '/',
+        'title': 'Calculators',
+        'url': '#calculators',
         'icon': 'fas fa-calculator',
-        'children': [],
+        'children': [
+            {'title': 'TCE Calculator', 'url': '/', 'icon': 'fas fa-calculator'},
+            {'title': 'Vessel Compare', 'url': '/vessel-compare/', 'icon': 'fas fa-scale-balanced'},
+            {'title': 'Freight Matrix', 'url': '/freight-matrix/', 'icon': 'fas fa-table-cells'},
+            {'title': 'FFA Valuation', 'url': '/ffa-valuation/', 'icon': 'fas fa-chart-line'},
+        ],
     },
     {
-        'title': 'FFA Valuation',
-        'url': '/ffa-valuation/',
-        'icon': 'fas fa-chart-line',
-        'children': [],
-    },
-    {
-        'title': 'Supply Forecast',
-        'url': '/supply-forecast/',
-        'icon': 'fas fa-satellite-dish',
-        'children': [],
-    },
-    {
-        'title': 'Admin Panel',
-        'url': '/admin/',
-        'icon': 'fas fa-cog',
-        'children': [],
-    },
-    {
-        'title': 'Indices',
-        'url': '/indices/',
-        'icon': 'fas fa-circle-dot',
+        'title': 'Market Data',
+        'url': '#market-data',
+        'icon': 'fas fa-list-ol',
         'children': [
             {'title': 'Capesize', 'url': '/indices/capesize/', 'icon': 'far fa-circle'},
             {'title': 'Panamax', 'url': '/indices/panamax/', 'icon': 'far fa-circle'},
@@ -40,6 +32,23 @@ DEFAULT_MENU_ITEMS = [
             {'title': 'Handysize', 'url': '/indices/handysize/', 'icon': 'far fa-circle'},
             {'title': 'Custom', 'url': '/indices/custom/', 'icon': 'far fa-circle'},
         ],
+    },
+    {
+        'title': 'Supply & Tracking',
+        'url': '#supply-tracking',
+        'icon': 'fas fa-satellite-dish',
+        'children': [
+            {'title': 'Supply Forecast', 'url': '/supply-forecast/', 'icon': 'fas fa-satellite-dish'},
+            {'title': 'OB Forecast', 'url': '/ob-forecast/', 'icon': 'fas fa-water'},
+            {'title': 'Vessel Fleet', 'url': '/supply-forecast/fleet/', 'icon': 'fas fa-ship'},
+            {'title': 'AIS Status', 'url': '/supply-forecast/status/', 'icon': 'fas fa-tower-broadcast'},
+        ],
+    },
+    {
+        'title': 'Admin',
+        'url': '/admin/',
+        'icon': 'fas fa-cog',
+        'children': [],
     },
 ]
 
