@@ -60,6 +60,19 @@ services:
     restart: unless-stopped
 
 
+  watchtower:
+    image: containrrr/watchtower
+    container_name: freightdash_watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_POLL_INTERVAL: 300
+      WATCHTOWER_CLEANUP: "true"
+    command: freightdash_web
+    networks:
+      - freightdash_network
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
