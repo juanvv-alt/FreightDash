@@ -31,6 +31,7 @@ python manage.py create_sample_routes    # seed RouteParameters (TCE calculator)
 python manage.py create_sample_voyages   # seed FreightVoyage / vessel data
 python manage.py create_admin            # create default superuser (admin/admin123)
 python manage.py upload_indices          # bulk-upload Baltic index Excel
+python manage.py seed_menu               # (re)build the grouped sidebar nav from DEFAULT_MENU_ITEMS
 
 # Supply forecast (supply app)
 python manage.py seed_pacific_ports      # seed ~33 Pacific load/discharge ports
@@ -81,13 +82,22 @@ Database config priority (settings.py):
 
 ## Architecture
 
-FreightDash is a Django 4.2 shipping-analytics web app deployed on Render (Singapore region). Three Django apps: `core`, `voyage`, `supply`.
+FreightDash is a Django 4.2 shipping-analytics web app deployed on Render (Singapore region). Four Django apps: `core`, `voyage`, `supply`, `ob_forecast` (Pacific open-tonnage forecast, mounted at `/ob-forecast/`). The Django admin uses the **Jazzmin** theme (config in `config/settings.py`); the app shell is custom (`templates/base.html` + the design-system CSS in `static/css/`).
+
+### Front-end / design system
+
+- **`static/css/tokens.css`** — design tokens (colour/spacing/radius/shadow CSS variables). Reference `var(--fd-*)` instead of hardcoding hex.
+- **`static/css/components.css`** — shared `fd-card` / `fd-btn` / `fd-table` / `fd-pill` / form-row components.
+- **`static/css/app.css`** — base layout (sidebar/navbar/footer), formerly an inline `<style>` block in `base.html`.
+- Served via WhiteNoise; `STATICFILES_DIRS` points at `static/`, `collectstatic` runs in `entrypoint.sh`.
 
 ### `core` app
 
 - **`MenuItem`** — database-driven nav menu managed via Django admin → "Menu Builder". Falls back to `DEFAULT_MENU_ITEMS` in `core/context_processors.py` when the table is empty.
+- **The nav is grouped by function**: `Calculators`, `Market Data`, `Supply & Tracking`, `Admin`. Group headers use anchor urls (`#calculators`, …) and render as collapsing buttons. `DEFAULT_MENU_ITEMS` is the single source of truth.
+- **Seeding**: run `python manage.py seed_menu` to (re)materialise editable `MenuItem` rows from `DEFAULT_MENU_ITEMS`. Migration `0013_reset_menu_to_grouped` clears the old imperatively-seeded rows. Do NOT add new menu-seeding migrations — edit `DEFAULT_MENU_ITEMS` and reseed.
 - `context_processors.menu_items` is registered globally and injects `menu_items` into every template.
-- To add a new top-level page: append an entry to `DEFAULT_MENU_ITEMS` in `core/context_processors.py` AND add a `MenuItem` row via admin (if the DB table already has rows, the fallback is not used).
+- **`core/admin_urls.py`** — `register_admin_urls(factory)` composes extra admin URLs onto `admin.site.get_urls` safely; both `core` and `voyage` admin use it (replaces the old per-app monkey-patching).
 
 ### `voyage` app
 
@@ -113,11 +123,18 @@ Root URLconf; all routes mount at `/`.
 | `/indices/custom/` | `indices_custom` | Cross-vessel custom index selection with presets |
 | `/upload-pdf-indices/` | `upload_pdf_indices` | Upload PDF → extract → verify → save |
 
+**Views (`voyage/views/` package):** the former 2081-line `views.py` is split into
+`indices.py`, `calculators.py` (tce/vessel_compare/freight_matrix), `uploads.py`
+(PDF/Excel/batch), `ffa.py`, with shared helpers in `helpers.py`. `views/__init__.py`
+re-exports the public view callables, so `urls.py` (`views.<name>`) and
+`admin.py` (`from .views import …`) are unaffected — import new views there too.
+
 **Calculators (`voyage/calculators.py`):**
 - `calculate_fuel_and_days` — voyage days, total fuel MT, port expenses.
 - `calculate_tce(freight_rate, fuel_price, intake, common_data)` → TCE $/day.
 - `calculate_freight_from_tce(target_tce, …)` → freight rate $/MT.
-- `calculate_vessel_comparison(global_inputs, voyages, vessels)` → BKI-normalised multi-vessel TCE.
+- `calculate_vessel_comparison(global_inputs, voyages, vessels)` → BKI-normalised multi-vessel TCE. Address commission is the named `ADDRESS_COMMISSION_FACTOR` constant.
+- Pinned by characterization tests in `voyage/test_calculators.py` — keep them green across refactors.
 
 **Admin customisations (`voyage/admin.py`):**
 Monkey-patches `admin.site.get_urls`:
@@ -295,15 +312,22 @@ config/
   settings.py          Django settings (DB config, INSTALLED_APPS, AISSTREAM_API_KEY)
   urls.py              Root URLconf: supply.urls then voyage.urls
 
+static/css/
+  tokens.css           Design tokens (var(--fd-*) colour/spacing/radius/shadow)
+  components.css       Shared fd-card / fd-btn / fd-table / fd-pill components
+  app.css              Base layout (sidebar/navbar/footer)
+
 core/
-  context_processors.py  DEFAULT_MENU_ITEMS (fallback nav when MenuItem table empty)
+  context_processors.py  DEFAULT_MENU_ITEMS (grouped nav; single source of truth)
+  admin_urls.py          register_admin_urls() — composable extra admin URLs
   models.py              MenuItem
+  management/commands/seed_menu.py   rebuild nav rows from DEFAULT_MENU_ITEMS
 
 voyage/
   models.py            RouteParameters, AvailableIndex, DailyIndexValue, FFACurve, …
-  views.py             All voyage page views + chart JSON endpoints
+  views/               Package: indices, calculators, uploads, ffa, helpers (+ __init__ re-exports)
   calculators.py       TCE / freight-rate / vessel-comparison logic
-  admin.py             Monkey-patched admin (index upload, config, menu builder)
+  admin.py             Custom admin (index upload, config) via register_admin_urls
   urls.py              Voyage URL patterns
   ffa_utils.py         FFA curve parsing helpers
   migrations/0003_…    Seeds AvailableIndex rows (BCI 5TC, BPI 82TC, …)

@@ -16,11 +16,11 @@ whitenoise==6.4.0
 # CORS & Security
 django-cors-headers==3.14.0
 django-environ==0.10.0
-Pillow==9.5.0
+Pillow==12.2.0
 
 # Data Processing
 pandas==2.2.2
-pdfplumber==0.10.3
+pdfplumber==0.11.10
 
 # AIS ingestion (supply forecast)
 websockets==12.0
