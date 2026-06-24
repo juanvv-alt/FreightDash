@@ -1,0 +1,146 @@
+/*
+ * FreightDash shared UI components.
+ *
+ * These `fd-`-prefixed classes capture the card / button / table / pill patterns
+ * that were copy-pasted into almost every page's inline <style> block. They are
+ * additive: adopting them lets a template delete its local copies without
+ * touching unrelated Bootstrap or page-specific styles. All values reference
+ * tokens.css so the design stays consistent.
+ */
+
+/* Cards */
+.fd-card {
+    background: var(--fd-surface);
+    border: 1px solid var(--fd-border);
+    border-radius: var(--fd-radius);
+    box-shadow: var(--fd-shadow-sm);
+    padding: var(--fd-space-4);
+    margin-bottom: var(--fd-space-4);
+}
+
+.fd-card__title {
+    margin: 0 0 var(--fd-space-3);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--fd-navy);
+}
+
+/* Buttons */
+.fd-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--fd-space-2);
+    padding: var(--fd-space-2) var(--fd-space-3);
+    border: 1px solid transparent;
+    border-radius: var(--fd-radius-sm);
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.fd-btn:hover {
+    text-decoration: none;
+    opacity: 0.92;
+}
+
+.fd-btn:disabled,
+.fd-btn[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.fd-btn--primary {
+    background: var(--fd-primary);
+    border-color: var(--fd-primary);
+    color: #fff;
+}
+
+.fd-btn--secondary {
+    background: var(--fd-secondary);
+    border-color: var(--fd-secondary);
+    color: #fff;
+}
+
+.fd-btn--outline {
+    background: transparent;
+    border-color: var(--fd-primary);
+    color: var(--fd-primary);
+}
+
+.fd-btn--sm {
+    padding: var(--fd-space-1) var(--fd-space-2);
+    font-size: 0.85rem;
+}
+
+/* Tables */
+.fd-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--fd-surface);
+}
+
+.fd-table th,
+.fd-table td {
+    padding: var(--fd-space-2) var(--fd-space-3);
+    border-bottom: 1px solid var(--fd-border);
+    text-align: left;
+}
+
+.fd-table thead th {
+    background: var(--fd-bg);
+    font-weight: 600;
+    color: var(--fd-navy);
+    white-space: nowrap;
+}
+
+.fd-table tbody tr:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.fd-table--numeric td,
+.fd-table--numeric th.fd-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Pills / tokens (index selectors, status badges) */
+.fd-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--fd-space-1);
+    padding: var(--fd-space-1) var(--fd-space-2);
+    border-radius: 999px;
+    background: var(--fd-bg);
+    border: 1px solid var(--fd-border);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.fd-pill--bullish { background: rgba(40, 167, 69, 0.12);  color: #1b7a32; border-color: rgba(40, 167, 69, 0.4); }
+.fd-pill--bearish { background: rgba(220, 53, 69, 0.12);  color: #a71d2a; border-color: rgba(220, 53, 69, 0.4); }
+.fd-pill--neutral { background: rgba(108, 117, 125, 0.12); color: #495057; border-color: rgba(108, 117, 125, 0.4); }
+
+/* Form-row grid — the repeated multi-column input layout */
+.fd-form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--fd-space-3);
+    margin-bottom: var(--fd-space-3);
+}
+
+.fd-form-row label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--fd-text-muted);
+    margin-bottom: var(--fd-space-1);
+}
+
+@media (max-width: 768px) {
+    .fd-form-row {
+        grid-template-columns: 1fr;
+    }
+}

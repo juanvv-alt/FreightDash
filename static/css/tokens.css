@@ -1,0 +1,61 @@
+/*
+ * FreightDash design tokens — the single source of truth for colour, spacing,
+ * radius and elevation across the whole app. Page templates should reference
+ * these variables (var(--fd-...)) instead of hardcoding hex values, so the look
+ * can be retuned in one place.
+ *
+ * Legacy aliases (--primary-color, --sidebar-width, ...) are kept so existing
+ * base-layout rules keep working during the migration.
+ */
+:root {
+    /* Brand palette — resolves the historic #007bff vs #1e3c72 split:
+       navy is the brand/structure colour, blue is the interactive accent. */
+    --fd-navy:            #1e3c72;
+    --fd-navy-2:          #2a5298;
+    --fd-blue:            #007bff;
+    --fd-blue-dark:       #0056b3;
+
+    /* Semantic colours */
+    --fd-primary:         var(--fd-blue);
+    --fd-secondary:       #6c757d;
+    --fd-success:         #28a745;
+    --fd-danger:          #dc3545;
+    --fd-warning:         #ffc107;
+    --fd-info:            #17a2b8;
+
+    /* Surfaces & text */
+    --fd-bg:              #f5f7fa;
+    --fd-surface:         #ffffff;
+    --fd-border:          #dee2e6;
+    --fd-text:            #212529;
+    --fd-text-muted:      #6c757d;
+
+    /* Spacing scale (8px base) */
+    --fd-space-1:         4px;
+    --fd-space-2:         8px;
+    --fd-space-3:         16px;
+    --fd-space-4:         24px;
+    --fd-space-5:         32px;
+
+    /* Radius & elevation */
+    --fd-radius:          8px;
+    --fd-radius-sm:       4px;
+    --fd-shadow-sm:       0 1px 3px rgba(0, 0, 0, 0.08);
+    --fd-shadow:          0 2px 8px rgba(0, 0, 0, 0.10);
+
+    /* Layout */
+    --fd-sidebar-width:           260px;
+    --fd-sidebar-collapsed-width: 70px;
+    --fd-header-height:           60px;
+
+    /* ---- Legacy aliases (do not add new usages) ---- */
+    --primary-color:           var(--fd-primary);
+    --secondary-color:         var(--fd-secondary);
+    --success-color:           var(--fd-success);
+    --danger-color:            var(--fd-danger);
+    --warning-color:           var(--fd-warning);
+    --info-color:              var(--fd-info);
+    --sidebar-width:           var(--fd-sidebar-width);
+    --sidebar-collapsed-width: var(--fd-sidebar-collapsed-width);
+    --header-height:           var(--fd-header-height);
+}

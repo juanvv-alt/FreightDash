@@ -215,6 +215,8 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# Project-level static sources (design-system CSS lives here).
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 # CompressedStaticFilesStorage serves gzip-compressed files without requiring
 # a pre-built manifest JSON, avoiding startup failures on ephemeral containers.
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'

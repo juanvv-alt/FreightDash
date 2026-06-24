@@ -1,0 +1,321 @@
+/*
+ * FreightDash base layout — sidebar, top navbar, content wrapper, footer.
+ * Extracted verbatim from the old inline <style> block in templates/base.html.
+ * Depends on the variables defined in tokens.css.
+ */
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Sidebar Styles */
+#sidebar-wrapper {
+    min-height: 100vh;
+    width: var(--sidebar-width);
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    background: linear-gradient(180deg, var(--fd-navy) 0%, var(--fd-navy-2) 100%);
+    transition: all 0.3s ease;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#sidebar-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+#sidebar-wrapper::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#sidebar-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+#sidebar-wrapper.collapsed {
+    width: var(--sidebar-collapsed-width);
+}
+
+.sidebar-heading {
+    padding: 1.5rem 1.25rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.sidebar-heading i {
+    font-size: 1.5rem;
+    min-width: 30px;
+    text-align: center;
+}
+
+.sidebar-heading .brand-text {
+    transition: opacity 0.3s ease;
+}
+
+#sidebar-wrapper.collapsed .sidebar-heading .brand-text {
+    opacity: 0;
+    width: 0;
+}
+
+.list-group {
+    padding: 1rem 0;
+}
+
+.list-group-item {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin-bottom: 0.25rem;
+}
+
+.list-group-item a {
+    display: flex;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.list-group-item a:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    padding-left: 1.5rem;
+}
+
+.list-group-item a.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border-left: 3px solid white;
+}
+
+.list-group-item a i {
+    min-width: 30px;
+    text-align: center;
+    font-size: 1.1rem;
+    transition: margin 0.3s ease;
+}
+
+.list-group-item a .menu-text {
+    margin-left: 10px;
+    transition: opacity 0.3s ease;
+}
+
+.menu-group {
+    margin-bottom: 0.25rem;
+}
+
+.menu-group-toggle {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0.875rem 1.25rem;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.menu-group-toggle:hover,
+.menu-group-toggle.open {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.menu-group-toggle i {
+    min-width: 30px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+.menu-group-toggle .menu-text {
+    margin-left: 10px;
+    flex: 1;
+    text-align: left;
+}
+
+.menu-group-toggle .chevron {
+    font-size: 0.85rem;
+    transition: transform 0.2s ease;
+}
+
+.menu-group-toggle.open .chevron {
+    transform: rotate(180deg);
+}
+
+.menu-group-links {
+    display: none;
+    padding-left: 0.4rem;
+}
+
+.menu-group-links.open {
+    display: block;
+}
+
+.menu-group-links .list-group-item a {
+    padding-left: 2rem;
+    font-size: 0.95rem;
+}
+
+.menu-group-links .list-group-item a.active {
+    border-left: 3px solid #f0f4ff;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#sidebar-wrapper.collapsed .list-group-item a .menu-text {
+    opacity: 0;
+    width: 0;
+    margin: 0;
+}
+
+#sidebar-wrapper.collapsed .menu-group-toggle .menu-text,
+#sidebar-wrapper.collapsed .menu-group-toggle .chevron {
+    display: none;
+}
+
+#sidebar-wrapper.collapsed .menu-group-links {
+    display: none !important;
+}
+
+#sidebar-wrapper.collapsed .list-group-item a {
+    justify-content: center;
+    padding: 0.875rem 0;
+}
+
+#sidebar-wrapper.collapsed .list-group-item a:hover {
+    padding-left: 0;
+}
+
+/* Page Content Wrapper */
+#page-content-wrapper {
+    min-height: 100vh;
+    margin-left: var(--sidebar-width);
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+#page-content-wrapper.expanded {
+    margin-left: var(--sidebar-collapsed-width);
+}
+
+/* Top Navbar */
+.top-navbar {
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+}
+
+.toggle-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    color: #333;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.navbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Main Content */
+main {
+    flex: 1;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+}
+
+/* Footer */
+footer {
+    background: white;
+    border-top: 1px solid var(--fd-border);
+    padding: 15px 20px;
+    text-align: center;
+    color: var(--fd-text-muted);
+    font-size: 14px;
+}
+
+/* Alerts */
+.alert {
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+/* Links */
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #sidebar-wrapper {
+        margin-left: calc(-1 * var(--sidebar-width));
+    }
+
+    #sidebar-wrapper.toggled {
+        margin-left: 0;
+    }
+
+    #page-content-wrapper {
+        margin-left: 0;
+    }
+
+    #page-content-wrapper.expanded {
+        margin-left: 0;
+    }
+}
+
+/* Overlay for mobile */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.sidebar-overlay.active {
+    display: block;
+}
