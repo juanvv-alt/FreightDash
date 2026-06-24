@@ -21,13 +21,22 @@
         <h2 style="margin-top: 0;">Restore Backup</h2>
         <p>Upload a previously downloaded JSON backup file.</p>
         <p><strong>Warning:</strong> If "replace existing" is checked, current core/voyage data will be deleted before import.</p>
-        <form method="post" enctype="multipart/form-data">
+        <form method="post" enctype="multipart/form-data" id="restore-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="restore">
             <div style="margin-bottom: 10px;">{{ restore_form.backup_file }}</div>
             <div style="margin-bottom: 10px;">{{ restore_form.replace_existing }} {{ restore_form.replace_existing.label }}</div>
-            <button type="submit" class="default">Restore Backup</button>
+            <button type="submit" class="default" id="restore-btn">Restore Backup</button>
+            <span id="restore-status" style="display:none; margin-left: 12px; color: #666;">Restoring… this may take a minute, please wait.</span>
         </form>
+        <script>
+            document.getElementById('restore-form').addEventListener('submit', function() {
+                var btn = document.getElementById('restore-btn');
+                btn.disabled = true;
+                btn.textContent = 'Restoring…';
+                document.getElementById('restore-status').style.display = 'inline';
+            });
+        </script>
     </div>
 
     <p>

@@ -49,7 +49,7 @@ exec gunicorn \
     --worker-class sync \
     --max-requests 1000 \
     --max-requests-jitter 50 \
-    --timeout 120 \
+    --timeout 600 \
     --access-logfile - \
     --error-logfile - \
     --log-level info \

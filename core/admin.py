@@ -1,12 +1,11 @@
-import json
-import os
-import tempfile
+from collections import defaultdict
 from io import StringIO
 
 from django import forms
 from django.apps import apps
 from django.contrib import admin, messages
 from django.core.management import call_command
+from django.core.serializers import deserialize as django_deserialize
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -18,6 +17,7 @@ from .models import MenuItem
 
 
 BACKUP_APP_LABELS = ("core", "voyage")
+BULK_BATCH_SIZE = 500
 
 
 class MenuItemAdmin(admin.ModelAdmin):
@@ -137,6 +137,22 @@ def menu_builder_view(request):
     return TemplateResponse(request, "admin/menu_builder.html", context)
 
 
+def _fast_restore(file_content_str, replace_existing):
+    objects_by_model = defaultdict(list)
+    for obj in django_deserialize("json", file_content_str):
+        objects_by_model[type(obj.object)].append(obj.object)
+
+    with transaction.atomic():
+        if replace_existing:
+            _delete_backup_app_data()
+        for model_cls, instances in objects_by_model.items():
+            for i in range(0, len(instances), BULK_BATCH_SIZE):
+                model_cls.objects.bulk_create(
+                    instances[i : i + BULK_BATCH_SIZE],
+                    ignore_conflicts=True,
+                )
+
+
 def _delete_backup_app_data():
     models = []
     for app_label in BACKUP_APP_LABELS:
@@ -176,29 +192,11 @@ def database_tools_view(request):
                 replace_existing = restore_form.cleaned_data["replace_existing"]
 
                 try:
-                    file_bytes = uploaded_file.read()
-                    json.loads(file_bytes.decode("utf-8"))
-                except (UnicodeDecodeError, json.JSONDecodeError):
-                    messages.error(request, "Invalid backup file. Please upload valid JSON.")
-                    return redirect(reverse("admin:database-tools"))
-
-                temp_path = None
-                try:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_file:
-                        tmp_file.write(file_bytes)
-                        temp_path = tmp_file.name
-
-                    with transaction.atomic():
-                        if replace_existing:
-                            _delete_backup_app_data()
-                        call_command("loaddata", temp_path, verbosity=0)
-
+                    file_content = uploaded_file.read().decode("utf-8")
+                    _fast_restore(file_content, replace_existing)
                     messages.success(request, "Backup restored successfully.")
                 except Exception as exc:
                     messages.error(request, f"Restore failed: {exc}")
-                finally:
-                    if temp_path and os.path.exists(temp_path):
-                        os.unlink(temp_path)
 
                 return redirect(reverse("admin:database-tools"))
 
