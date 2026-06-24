@@ -253,22 +253,41 @@ JAZZMIN_SETTINGS = {
         "voyage.vesselprofile":      "fas fa-ship",
         "voyage.vesselfuelprofile":  "fas fa-gas-pump",
         "voyage.freightvoyage":      "fas fa-anchor",
+        "voyage.ffacurve":           "fas fa-chart-area",
         "supply.port":               "fas fa-anchor",
         "supply.trackedvessel":      "fas fa-ship",
         "supply.vesselstate":        "fas fa-location-dot",
         "supply.portcallevent":      "fas fa-exchange-alt",
         "supply.dailysupplysnapshot": "fas fa-layer-group",
         "supply.supplysignal":       "fas fa-satellite-dish",
+        "ob_forecast":               "fas fa-water",
+        "ob_forecast.obtonnagesnapshot": "fas fa-layer-group",
+        "ob_forecast.obforecastsignal":  "fas fa-arrow-trend-up",
+        "ob_forecast.obuploadlog":       "fas fa-file-import",
     },
 
     "order_with_respect_to": [
+        # Freight Data (voyage): market data first, then vessel/freight config.
         "voyage.dailyindexvalue",
         "voyage.availableindex",
         "voyage.customindexpreset",
+        "voyage.ffacurve",
         "voyage.routeparameters",
         "voyage.vesselprofile",
         "voyage.vesselfuelprofile",
         "voyage.freightvoyage",
+        # Vessel Supply (supply).
+        "supply.port",
+        "supply.trackedvessel",
+        "supply.vesselstate",
+        "supply.portcallevent",
+        "supply.dailysupplysnapshot",
+        "supply.supplysignal",
+        # OB Forecast (ob_forecast) — previously unordered, fell to the bottom.
+        "ob_forecast.obtonnagesnapshot",
+        "ob_forecast.obforecastsignal",
+        "ob_forecast.obuploadlog",
+        # System (core) + auth last.
         "core.menuitem",
         "auth.user",
         "auth.group",
@@ -283,12 +302,12 @@ JAZZMIN_SETTINGS = {
             },
             {
                 "name": "Upload: Batch History (Excel)",
-                "url": "/upload-batch-indices/",
+                "url": "admin:upload-batch-indices",
                 "icon": "fas fa-table",
             },
             {
                 "name": "Upload: PDF Report",
-                "url": "/upload-pdf-indices/",
+                "url": "voyage:upload_pdf_indices",
                 "icon": "fas fa-file-pdf",
             },
             {
