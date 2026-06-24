@@ -7,7 +7,7 @@
 .ffa-wrap { max-width: 1300px; margin: 0 auto; padding: 24px 20px; }
 
 .page-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-.page-title { font-size: 26px; font-weight: 600; color: #1e3c72; margin: 0; }
+.page-title { font-size: 26px; font-weight: 600; color: var(--fd-navy); margin: 0; }
 
 /* Card base */
 .ffa-card { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 14px; overflow: hidden; }
@@ -22,19 +22,19 @@
     border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 13px;
     resize: vertical; outline: none; transition: border-color .2s;
 }
-#ffa-curve-textarea:focus { border-color: #1e3c72; }
+#ffa-curve-textarea:focus { border-color: var(--fd-navy); }
 .curve-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.vessel-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; background: #e8f0fe; color: #1e3c72; }
-.save-ok { display: none; color: #28a745; font-size: 13px; font-weight: 600; }
+.vessel-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; background: #e8f0fe; color: var(--fd-navy); }
+.save-ok { display: none; color: var(--fd-success); font-size: 13px; font-weight: 600; }
 .save-ok.visible { display: inline-block; }
 
 /* Period table (editable) */
 #ffa-periods-table-wrap { margin-top: 14px; display: none; overflow-x: auto; }
 table.ffa-periods-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-table.ffa-periods-tbl th { background: #1e3c72; color: white; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; white-space: nowrap; }
+table.ffa-periods-tbl th { background: var(--fd-navy); color: white; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; white-space: nowrap; }
 table.ffa-periods-tbl td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
 table.ffa-periods-tbl td input { width: 90px; padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; text-align: right; }
-table.ffa-periods-tbl td input:focus { outline: none; border-color: #1e3c72; }
+table.ffa-periods-tbl td input:focus { outline: none; border-color: var(--fd-navy); }
 .type-badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #f0f4ff; color: #444; font-weight: 600; }
 
 /* Section 2 – Controls */
@@ -42,9 +42,9 @@ table.ffa-periods-tbl td input:focus { outline: none; border-color: #1e3c72; }
 .ctrl-field { display: flex; align-items: center; gap: 8px; }
 .ctrl-field label { font-size: 12px; font-weight: 700; color: #666; white-space: nowrap; text-transform: uppercase; }
 .ctrl-field input[type=date] { padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; }
-.ctrl-field input[type=date]:focus { outline: none; border-color: #1e3c72; }
+.ctrl-field input[type=date]:focus { outline: none; border-color: var(--fd-navy); }
 .ctrl-field input[type=range] { width: 160px; }
-#period-value { font-size: 14px; font-weight: 700; color: #1e3c72; min-width: 30px; }
+#period-value { font-size: 14px; font-weight: 700; color: var(--fd-navy); min-width: 30px; }
 
 /* Coverage warning */
 #coverage-warning { display: none; }
@@ -54,10 +54,10 @@ table.ffa-periods-tbl td input:focus { outline: none; border-color: #1e3c72; }
 .kpi-strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .kpi-card { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 14px 18px; min-width: 160px; flex: 0 0 auto; }
 .kpi-card .kpi-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 4px; }
-.kpi-card .kpi-value { font-size: 22px; font-weight: 700; color: #1e3c72; }
+.kpi-card .kpi-value { font-size: 22px; font-weight: 700; color: var(--fd-navy); }
 .kpi-card .kpi-sub { font-size: 11px; color: #999; margin-top: 2px; }
-.kpi-card.kpi-ffa-main { border-top: 3px solid #1e3c72; }
-.kpi-card.kpi-vessel { border-top: 3px solid #28a745; }
+.kpi-card.kpi-ffa-main { border-top: 3px solid var(--fd-navy); }
+.kpi-card.kpi-vessel { border-top: 3px solid var(--fd-success); }
 
 /* Gantt timeline */
 #ffa-timeline { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); padding: 16px 16px 10px; margin-bottom: 14px; overflow-x: auto; display: none; }
@@ -73,12 +73,12 @@ table.ffa-periods-tbl td input:focus { outline: none; border-color: #1e3c72; }
 /* Axis row */
 .tl-axis      { position: relative; height: 18px; border-top: 1px solid #e0e0e0; }
 .tl-block { position: absolute; top: 0; height: 100%; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: white; overflow: hidden; white-space: nowrap; padding: 0 4px; cursor: default; box-sizing: border-box; }
-.tl-block.monthly { background: #1e3c72; }
-.tl-block.quarterly { background: #2a5298; }
-.tl-block.balmo { background: #17a2b8; }
-.tl-block.calendar_year { background: #6c757d; }
+.tl-block.monthly { background: var(--fd-navy); }
+.tl-block.quarterly { background: var(--fd-navy-2); }
+.tl-block.balmo { background: var(--fd-info); }
+.tl-block.calendar_year { background: var(--fd-secondary); }
 .tl-block.combined { background: #adb5bd; }
-.tl-employment { position: absolute; top: 0; height: 100%; border-radius: 2px; background: rgba(40,167,69,0.45); border: 1px solid #28a745; box-sizing: border-box; }
+.tl-employment { position: absolute; top: 0; height: 100%; border-radius: 2px; background: rgba(40,167,69,0.45); border: 1px solid var(--fd-success); box-sizing: border-box; }
 .tl-tick { position: absolute; top: 0; height: 6px; border-left: 1px solid #ccc; }
 .tl-tick-label { position: absolute; top: 6px; font-size: 9px; color: #aaa; transform: translateX(-50%); white-space: nowrap; }
 
@@ -97,18 +97,18 @@ table.breakdown-tbl tfoot td:first-child { text-align: left; }
 .vessel-section-hdr h6 { margin: 0; font-size: 14px; font-weight: 700; color: #333; }
 .add-vessel-row { display: flex; align-items: center; gap: 8px; }
 .add-vessel-row select { padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; }
-.add-vessel-row select:focus { outline: none; border-color: #1e3c72; }
+.add-vessel-row select:focus { outline: none; border-color: var(--fd-navy); }
 
 /* Buttons */
-.btn-primary-sm { padding: 6px 14px; background: #1e3c72; color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-primary-sm { padding: 6px 14px; background: var(--fd-navy); color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .btn-primary-sm:hover { background: #163060; }
-.btn-success-sm { padding: 6px 14px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-success-sm { padding: 6px 14px; background: var(--fd-success); color: white; border: none; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .btn-success-sm:hover { background: #218838; }
 .btn-remove { background: none; border: none; color: #999; cursor: pointer; font-size: 14px; padding: 0 4px; }
 .btn-remove:hover { color: #cc2200; }
 
 /* Loading spinner */
-.spin { display: none; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #1e3c72; border-radius: 50%; animation: spin .6s linear infinite; }
+.spin { display: none; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: var(--fd-navy); border-radius: 50%; animation: spin .6s linear infinite; }
 .spin.active { display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
