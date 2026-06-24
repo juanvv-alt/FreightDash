@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from .models import RouteParameters
@@ -6,6 +7,9 @@ from .calculators import calculate_fuel_and_days, calculate_tce, calculate_freig
 
 class TCECalculatorTestCase(TestCase):
     def setUp(self):
+        # Pages are gated by core.middleware.LoginRequiredMiddleware.
+        user = get_user_model().objects.create_user('tester', password='x')
+        self.client.force_login(user)
         self.route = RouteParameters.objects.create(
             route='Test Route',
             ballast_distance=2800,

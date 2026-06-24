@@ -1178,8 +1178,8 @@ def verify_pdf_indices(request, session_id):
             # Remove temp file
             try:
                 os.remove(temp_file)
-            except:
-                pass
+            except OSError as exc:
+                logger.warning("Could not remove temp file %s: %s", temp_file, exc)
             messages.info(request, 'PDF upload cancelled.')
             return redirect('voyage:upload_pdf_indices')
 
@@ -1284,8 +1284,8 @@ def _save_selected_indices(request, session_data, temp_file):
     # Clean up temp file
     try:
         os.remove(temp_file)
-    except:
-        pass
+    except OSError as exc:
+        logger.warning("Could not remove temp file %s: %s", temp_file, exc)
 
     if saved_count > 0:
         messages.success(request, f'Successfully imported {saved_count} index values.')

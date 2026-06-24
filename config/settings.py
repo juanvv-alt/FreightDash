@@ -127,9 +127,6 @@ elif database_url:
     DATABASES = {
         'default': dj_database_url.parse(database_url, conn_max_age=600, conn_health_checks=True)
     }
-    # Avoid server-side cursors in production; they can be invalidated when
-    # transactions close before queryset iteration fully completes.
-    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 else:
     database_host = config('DATABASE_HOST', default='db')
 
@@ -152,7 +149,6 @@ else:
                 'CONN_MAX_AGE': 600,
                 'CONN_HEALTH_CHECKS': True,
                 'ATOMIC_REQUESTS': True,
-                'DISABLE_SERVER_SIDE_CURSORS': True,
             }
         }
     else:
@@ -172,9 +168,15 @@ else:
                 'CONN_MAX_AGE': 600,
                 'CONN_HEALTH_CHECKS': True,
                 'ATOMIC_REQUESTS': True,
-                'DISABLE_SERVER_SIDE_CURSORS': True,
             }
         }
+
+
+# Postgres must avoid server-side cursors: they can be invalidated when a
+# transaction closes before queryset iteration completes. Apply uniformly to
+# any Postgres connection regardless of which config branch built it above.
+if DATABASES['default'].get('ENGINE') == 'django.db.backends.postgresql':
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
 
 # Password validation

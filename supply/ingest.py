@@ -465,5 +465,5 @@ class AISIngestor:
             from django.core.cache import cache
             cache.set("ais_last_stats", stats, timeout=86400)
             cache.set("ais_last_stats_time", timezone.now().isoformat(), timeout=86400)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Could not cache AIS stats: %s", exc)
