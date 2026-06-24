@@ -47,6 +47,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       ALLOWED_HOSTS: localhost,127.0.0.1,fdd.synosingdvr.synology.me
       CSRF_TRUSTED_ORIGINS: http://fdd.synosingdvr.synology.me:4432
+      AISSTREAM_API_KEY: 60e5f8a342c431b52cf3fc4a463a29fc65bd5325
       TZ: Asia/Singapore
     ports:
       - "8000:8000"
