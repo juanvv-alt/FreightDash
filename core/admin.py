@@ -5,8 +5,9 @@ from django import forms
 from django.apps import apps
 from django.contrib import admin, messages
 from django.core.management import call_command
+from django.core.management.color import no_style
 from django.core.serializers import deserialize as django_deserialize
-from django.db import transaction
+from django.db import connection, transaction
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
@@ -139,6 +140,30 @@ def menu_builder_view(request):
     return TemplateResponse(request, "admin/menu_builder.html", context)
 
 
+def _backup_app_models():
+    """All models in the backed-up apps, in app/definition order."""
+    models = []
+    for app_label in BACKUP_APP_LABELS:
+        models.extend(apps.get_app_config(app_label).get_models())
+    return models
+
+
+def _reset_pk_sequences(models):
+    """Realign auto-increment ID sequences with the max existing PK.
+
+    Restores insert rows with their original primary keys, which on PostgreSQL
+    does NOT advance the table's sequence -- so the next ``.create()`` would
+    request an id that already exists and raise a duplicate-key IntegrityError.
+    ``sequence_reset_sql`` returns an empty list on backends without sequences
+    (e.g. SQLite), making this a safe no-op there.
+    """
+    reset_sql = connection.ops.sequence_reset_sql(no_style(), models)
+    if reset_sql:
+        with connection.cursor() as cursor:
+            for sql in reset_sql:
+                cursor.execute(sql)
+
+
 def _fast_restore(file_content_str, replace_existing):
     objects_by_model = defaultdict(list)
     for obj in django_deserialize("json", file_content_str):
@@ -153,16 +178,14 @@ def _fast_restore(file_content_str, replace_existing):
                     instances[i : i + BULK_BATCH_SIZE],
                     ignore_conflicts=True,
                 )
+        # Loaded rows carry explicit PKs; realign sequences so later inserts
+        # (e.g. adding a vessel) don't collide on Postgres.
+        _reset_pk_sequences(_backup_app_models())
 
 
 def _delete_backup_app_data():
-    models = []
-    for app_label in BACKUP_APP_LABELS:
-        app_config = apps.get_app_config(app_label)
-        models.extend(app_config.get_models())
-
     # Delete in reverse order to respect FK dependencies.
-    for model in reversed(models):
+    for model in reversed(_backup_app_models()):
         model.objects.all().delete()
 
 
