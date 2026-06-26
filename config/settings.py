@@ -329,6 +329,11 @@ JAZZMIN_SETTINGS = {
                 "url": "admin:database-tools",
                 "icon": "fas fa-database",
             },
+            {
+                "name": "Software Updates",
+                "url": "admin:software-updates",
+                "icon": "fas fa-cloud-arrow-down",
+            },
         ],
     },
 }
@@ -356,3 +361,13 @@ LOGOUT_REDIRECT_URL = '/admin/login/'
 
 # AIS supply forecast: free aisstream.io websocket API key (one connection/key).
 AISSTREAM_API_KEY = config('AISSTREAM_API_KEY', default='')
+
+# Software version / update check (Software Updates admin page).
+# APP_GIT_SHA / APP_BUILD_TIME are baked into the Docker image by CI; empty in
+# local dev and in any image built before this feature.
+APP_GIT_SHA = config('APP_GIT_SHA', default='')
+APP_BUILD_TIME = config('APP_BUILD_TIME', default='')
+# Repo whose default branch is compared against the running build.
+GITHUB_REPO = config('GITHUB_REPO', default='juanvv-alt/FreightDash')
+# Optional read-only token (only needed if the repo is private / for rate limits).
+GITHUB_TOKEN = config('GITHUB_TOKEN', default='')

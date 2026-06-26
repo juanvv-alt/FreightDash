@@ -3,6 +3,7 @@ from io import StringIO
 
 from django import forms
 from django.apps import apps
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.management import call_command
 from django.core.management.color import no_style
@@ -13,6 +14,7 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 
 from core.admin_urls import register_admin_urls
+from core.updates import get_update_status
 from django.urls import path, reverse
 from django.utils import timezone
 
@@ -238,6 +240,29 @@ def database_tools_view(request):
     return TemplateResponse(request, "admin/database_tools.html", context)
 
 
+def software_updates_view(request):
+    force_refresh = False
+    if request.method == "POST" and request.POST.get("action") == "recheck":
+        force_refresh = True
+
+    status = get_update_status(force_refresh=force_refresh)
+
+    if force_refresh:
+        if status["error"]:
+            messages.error(request, status["error"])
+        else:
+            messages.success(request, "Re-checked GitHub for the latest version.")
+        return redirect(reverse("admin:software-updates"))
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Software Updates",
+        "status": status,
+        "github_repo": settings.GITHUB_REPO,
+    }
+    return TemplateResponse(request, "admin/software_updates.html", context)
+
+
 # Register the MenuItem model
 admin.site.register(MenuItem, MenuItemAdmin)
 
@@ -253,6 +278,11 @@ def _custom_admin_urls():
             "database-tools/",
             admin.site.admin_view(database_tools_view),
             name="database-tools",
+        ),
+        path(
+            "software-updates/",
+            admin.site.admin_view(software_updates_view),
+            name="software-updates",
         ),
     ]
 

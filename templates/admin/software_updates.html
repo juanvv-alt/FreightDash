@@ -1,0 +1,70 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width: 820px;">
+    <h1>Software Updates</h1>
+    <p>Compares the running build against the latest commit on
+       <code>{{ github_repo }}</code> (branch <code>main</code>).</p>
+
+    {% with s=status %}
+    {# ---- Status banner ---- #}
+    {% if s.state == "up_to_date" %}
+        <div style="border-left: 4px solid #28a745; background: #eaf6ec; padding: 14px 16px; border-radius: 4px; margin: 18px 0;">
+            <strong>&#10003; You are running the latest build.</strong>
+        </div>
+    {% elif s.state == "update_available" %}
+        <div style="border-left: 4px solid #e0a800; background: #fff8e1; padding: 14px 16px; border-radius: 4px; margin: 18px 0;">
+            <strong>&#8593; Update available{% if s.behind_count %} &mdash; {{ s.behind_count }} commit{{ s.behind_count|pluralize }} behind{% endif %}.</strong>
+            <div style="margin-top: 6px; color: #555;">New builds are pulled and applied automatically by Watchtower within ~5 minutes. Reload this page after it runs to confirm.</div>
+        </div>
+    {% elif s.state == "unknown" %}
+        <div style="border-left: 4px solid #6c757d; background: #f1f3f5; padding: 14px 16px; border-radius: 4px; margin: 18px 0;">
+            <strong>Running build is not stamped.</strong>
+            <div style="margin-top: 6px; color: #555;">This image predates version tracking. The next automatic update will build in the version stamp and this page will start reporting it.</div>
+        </div>
+    {% else %}
+        <div style="border-left: 4px solid #dc3545; background: #fdecea; padding: 14px 16px; border-radius: 4px; margin: 18px 0;">
+            <strong>Couldn't check for updates.</strong>
+            <div style="margin-top: 6px; color: #555;">{{ s.error }}</div>
+        </div>
+    {% endif %}
+
+    {# ---- Version cards ---- #}
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0;">
+        <div style="flex: 1; min-width: 280px; border: 1px solid #ddd; border-radius: 6px; padding: 16px;">
+            <h2 style="margin-top: 0; font-size: 1rem;">Running build</h2>
+            {% if s.running %}
+                <p style="margin: 4px 0;"><code style="font-size: 1.05rem;">{{ s.running.short_sha }}</code></p>
+                {% if s.running.build_time %}<p style="margin: 4px 0; color: #666;">Built {{ s.running.build_time }}</p>{% endif %}
+            {% else %}
+                <p style="margin: 4px 0; color: #666;">unknown (pre-version-tracking image)</p>
+            {% endif %}
+        </div>
+
+        <div style="flex: 1; min-width: 280px; border: 1px solid #ddd; border-radius: 6px; padding: 16px;">
+            <h2 style="margin-top: 0; font-size: 1rem;">Latest on GitHub</h2>
+            {% if s.latest %}
+                <p style="margin: 4px 0;">
+                    <code style="font-size: 1.05rem;">{{ s.latest.short_sha }}</code>
+                    {% if s.latest.html_url %}<a href="{{ s.latest.html_url }}" target="_blank" rel="noopener" style="margin-left: 8px;">view on GitHub &#8599;</a>{% endif %}
+                </p>
+                {% if s.latest.message %}<p style="margin: 4px 0;">{{ s.latest.message }}</p>{% endif %}
+                {% if s.latest.date %}<p style="margin: 4px 0; color: #666;">{{ s.latest.date }}</p>{% endif %}
+            {% else %}
+                <p style="margin: 4px 0; color: #666;">unavailable</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ---- Re-check ---- #}
+    <form method="post" style="margin-top: 8px;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="recheck">
+        <button type="submit" class="default">Re-check now</button>
+        <span style="margin-left: 12px; color: #888;">Last checked {{ s.checked_at|date:"Y-m-d H:i:s" }} UTC</span>
+    </form>
+    {% endwith %}
+
+    <p style="margin-top: 24px;">Return to <a href="{% url 'admin:index' %}">Admin Home</a></p>
+</div>
+{% endblock %}

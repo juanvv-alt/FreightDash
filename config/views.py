@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.conf import settings
 from django.db import connection
 from django.core.cache import cache
 import datetime
@@ -21,6 +22,7 @@ def health_check(request):
         return JsonResponse(health_status, status=503)
     
     health_status['status'] = 'healthy'
+    health_status['version'] = settings.APP_GIT_SHA or 'unknown'
     health_status['timestamp'] = datetime.datetime.now().isoformat()
     return JsonResponse(health_status, status=200)
 

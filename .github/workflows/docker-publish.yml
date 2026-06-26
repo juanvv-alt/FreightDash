@@ -32,5 +32,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: juanvv0alt/freightdash:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

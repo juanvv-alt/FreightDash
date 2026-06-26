@@ -50,6 +50,14 @@ RUN chmod +x /app/entrypoint.sh
 # DATABASE_URL is available, not here during the build.
 RUN mkdir -p /app/staticfiles && chown -R appuser:appuser /app/staticfiles
 
+# Stamp the build version into the image (set by CI via --build-arg). Kept near
+# the end so it never busts the dependency/code layers above. The running app
+# reports these on the Software Updates admin page and the /health endpoint.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV APP_GIT_SHA=$GIT_SHA \
+    APP_BUILD_TIME=$BUILD_TIME
+
 # Switch to non-root user
 USER appuser
 
